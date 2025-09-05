@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Administration - Dictionnaire Zarma</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+            color: white;
+            padding: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-left h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header-left p {
+            opacity: 0.8;
+            font-size: 1.1rem;
+        }
+
+        .header-right {
+            text-align: right;
+        }
+
+        .user-info {
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        .logout-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .tabs {
+            display: flex;
+            background: #f7fafc;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #718096;
+            transition: all 0.3s ease;
+        }
+
+        .tab.active {
+            background: white;
+            color: #2d3748;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 30px;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #2d3748;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+            color: white;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(245, 101, 101, 0.3);
+        }
+
+        .words-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .word-card {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 15px;
+            padding: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .word-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .word-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .word-zarma {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #2d3748;
+        }
+
+        .word-category {
+            background: #667eea;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .word-meaning {
+            color: #4a5568;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+        }
+
+        .word-examples {
+            font-style: italic;
+            color: #718096;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        .word-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .search-bar {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        .search-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 1rem;
+        }
+
+        .filter-select {
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 1rem;
+            min-width: 150px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+            z-index: 1000;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+            max-width: 300px;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification.success {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+        }
+
+        .notification.error {
+            background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+
+        .loading::after {
+            content: '';
+            width: 40px;
+            height: 40px;
+            border: 3px solid #e2e8f0;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 60px 20px;
+            color: #718096;
+            font-size: 1.1rem;
+        }
+
+        .export-section {
+            background: #f7fafc;
+            padding: 25px;
+            border-radius: 15px;
+            margin-top: 20px;
+        }
+
+        .export-options {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                text-align: center;
+                gap: 15px;
+            }
+
+            .tabs {
+                flex-direction: column;
+            }
+            
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .words-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <h1>🛠️ Administration - Dictionnaire Zarma</h1>
+                <p>Interface de gestion des mots et données du dictionnaire</p>
+            </div>
+            <div class="header-right">
+                <div class="user-info" id="userInfo">
+                    Connecté en tant que: <span id="currentUser">Chargement...</span>
+                </div>
+                <button class="logout-btn" onclick="logout()">Déconnexion</button>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="add-word">➕ Ajouter un Mot</button>
+            <button class="tab" data-tab="manage-words">📚 Gérer les Mots</button>
+            <button class="tab" data-tab="stats">📊 Statistiques</button>
+            <button class="tab" data-tab="export">💾 Export/Import</button>
+        </div>
+
+        <!-- Onglet Ajouter un Mot -->
+        <div id="add-word" class="tab-content active">
+            <h2 id="form-title">Ajouter un nouveau mot</h2>
+            <form id="word-form">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="zarma-word">Mot en Zarma *</label>
+                        <input type="text" id="zarma-word" name="zarmaWord" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="french-meaning">Signification en Français *</label>
+                        <input type="text" id="french-meaning" name="frenchMeaning" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="category">Catégorie</label>
+                        <select id="category" name="category">
+                            <option value="">Sélectionner...</option>
+                            <option value="nom">Nom</option>
+                            <option value="verbe">Verbe</option>
+                            <option value="adjectif">Adjectif</option>
+                            <option value="adverbe">Adverbe</option>
+                            <option value="pronom">Pronom</option>
+                            <option value="préposition">Préposition</option>
+                            <option value="conjonction">Conjonction</option>
+                            <option value="interjection">Interjection</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="difficulty">Niveau de difficulté</label>
+                        <select id="difficulty" name="difficultyLevel">
+                            <option value="1">1 - Débutant</option>
+                            <option value="2">2 - Intermédiaire</option>
+                            <option value="3">3 - Avancé</option>
+                            <option value="4">4 - Expert</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="pronunciation">Prononciation</label>
+                        <input type="text" id="pronunciation" name="pronunciation" placeholder="ex: baa-ni">
+                    </div>
+                    <div class="form-group">
+                        <label for="etymology">Étymologie</label>
+                        <input type="text" id="etymology" name="etymology" placeholder="Origine du mot">
+                    </div>
+                </div>
+
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="zarma-example">Exemple en Zarma *</label>
+                        <textarea id="zarma-example" name="zarmaExample" required placeholder="Phrase d'exemple en zarma"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="french-example">Exemple en Français *</label>
+                        <textarea id="french-example" name="frenchExample" required placeholder="Traduction de l'exemple"></textarea>
+                    </div>
+                </div>
+
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="synonyms">Synonymes</label>
+                        <input type="text" id="synonyms" name="synonyms" placeholder="Séparer par des virgules">
+                    </div>
+                    <div class="form-group">
+                        <label for="antonyms">Antonymes</label>
+                        <input type="text" id="antonyms" name="antonyms" placeholder="Séparer par des virgules">
+                    </div>
+                    <div class="form-group">
+                        <label for="related-words">Mots liés</label>
+                        <input type="text" id="related-words" name="relatedWords" placeholder="Séparer par des virgules">
+                    </div>
+                </div>
+
+                <div style="text-align: center; margin-top: 30px;">
+                    <button type="submit" class="btn btn-primary" id="submit-btn">💾 Enregistrer le Mot</button>
+                    <button type="button" class="btn btn-secondary" onclick="clearForm()">🗑️ Effacer</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Onglet Gérer les Mots -->
+        <div id="manage-words" class="tab-content">
+            <h2>Gestion des mots existants</h2>
+            
+            <div class="search-bar">
+                <input type="text" class="search-input" id="search-words" placeholder="🔍 Rechercher un mot...">
+                <select class="filter-select" id="filter-category">
+                    <option value="">Toutes catégories</option>
+                </select>
+                <button class="btn btn-secondary" onclick="loadWordsList()">🔄 Actualiser</button>
+            </div>
+
+            <div id="words-loading" class="loading" style="display: none;">
+                Chargement des mots...
+            </div>
+
+            <div id="words-container" class="words-grid">
+                <!-- Les mots seront chargés ici -->
+            </div>
+        </div>
+
+        <!-- Onglet Statistiques -->
+        <div id="stats" class="tab-content">
+            <h2>Statistiques du dictionnaire</h2>
+            
+            <div id="stats-loading" class="loading" style="display: none;">
+                Chargement des statistiques...
+            </div>
+
+            <div id="stats-content" style="display: none;">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number" id="total-words">0</div>
+                        <div class="stat-label">Mots Total</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="total-categories">0</div>
+                        <div class="stat-label">Catégories</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="avg-difficulty">0</div>
+                        <div class="stat-label">Difficulté Moyenne</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="completion-rate">0%</div>
+                        <div class="stat-label">Taux de Complétion</div>
+                    </div>
+                </div>
+
+                <div style="background: white; padding: 20px; border-radius: 15px; margin-top: 20px;">
+                    <h3>Répartition par catégories</h3>
+                    <div id="category-stats"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Onglet Export/Import -->
+        <div id="export" class="tab-content">
+            <h2>Export et Import des données</h2>
+            
+            <div class="export-section">
+                <h3>📤 Exporter les données</h3>
+                <p>Téléchargez vos données dans différents formats</p>
+                <div class="export-options">
+                    <button class="btn btn-primary" onclick="exportData('json')">📄 JSON</button>
+                    <button class="btn btn-primary" onclick="exportData('csv')">📊 CSV</button>
+                </div>
+            </div>
+
+            <div class="export-section">
+                <h3>📥 Importer des données</h3>
+                <p>Charger des mots depuis un fichier</p>
+                <input type="file" id="import-file" accept=".json,.csv" style="margin: 10px 0;">
+                <div class="export-options">
+                    <button class="btn btn-secondary" onclick="importData()">📁 Importer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification -->
+    <div id="notification" class="notification"></div>
+
+    <script>
+        // Variables globales
+        let currentUser = null;
+        let editingWordId = null;
+        let allWords = [];
+        let allCategories = [];
+
+        // Vérification de l'authentification au chargement
+        window.addEventListener('load', function() {
+            checkAuthentication();
+            setupTabNavigation(); // Initialiser la navigation par onglets
+        });
+
+        // Configuration de la navigation par onglets
+        function setupTabNavigation() {
+            // Ajouter les écouteurs d'événements aux onglets
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', function() {
+                    const tabName = this.getAttribute('data-tab');
+                    showTab(tabName);
+                });
+            });
+
+            // Vérifier si on a un hash dans l'URL
+            const hash = window.location.hash.substring(1);
+            if (hash && document.getElementById(hash)) {
+                showTab(hash);
+            }
+        }
+
+        // Vérifier si l'utilisateur est connecté
+        function checkAuthentication() {
+            const token = localStorage.getItem('admin_token');
+            const expirationTime = localStorage.getItem('token_expiration');
+            const userData = localStorage.getItem('admin_user');
+
+            if (!token || !expirationTime || Date.now() >= parseInt(expirationTime)) {
+                window.location.href = 'login.html';
+                return;
+            }
+
+            if (userData) {
+                currentUser = JSON.parse(userData);
+                updateUserInfo();
+            }
+
+            verifyTokenWithServer(token);
+        }
+
+        // Vérifier le token avec le serveur
+        async function verifyTokenWithServer(token) {
+            try {
+                const response = await fetch('/api/auth/verify', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Token invalide');
+                }
+
+                const result = await response.json();
+                if (result.success) {
+                    currentUser = result.user;
+                    updateUserInfo();
+                } else {
+                    throw new Error('Vérification échouée');
+                }
+            } catch (error) {
+                console.error('Erreur de vérification:', error);
+                showNotification('Session expirée. Veuillez vous reconnecter.', 'error');
+                setTimeout(() => {
+                    localStorage.clear();
+                    window.location.href = 'login.html';
+                }, 2000);
+            }
+        }
+
+        // Mettre à jour les informations utilisateur
+        function updateUserInfo() {
+            if (currentUser) {
+                document.getElementById('currentUser').textContent = currentUser.username;
+            }
+        }
+
+        // Fonction pour faire des requêtes authentifiées
+        async function authenticatedRequest(url, options = {}) {
+            const token = localStorage.getItem('admin_token');
+            
+            const defaultOptions = {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            };
+
+            const mergedOptions = {
+                ...defaultOptions,
+                ...options,
+                headers: {
+                    ...defaultOptions.headers,
+                    ...options.headers
+                }
+            };
+
+            try {
+                const response = await fetch(url, mergedOptions);
+                
+                if (response.status === 401) {
+                    showNotification('Session expirée. Redirection vers la connexion...', 'error');
+                    setTimeout(() => {
+                        localStorage.clear();
+                        window.location.href = 'login.html';
+                    }, 2000);
+                    return null;
+                }
+
+                return response;
+            } catch (error) {
+                console.error('Erreur de requête:', error);
+                showNotification('Erreur de connexion au serveur', 'error');
+                return null;
+            }
+        }
+
+        // Gestion des onglets - CORRIGÉ
+        function showTab(tabName) {
+            console.log('Affichage de l\'onglet:', tabName);
+            
+            // Désactiver tous les onglets et contenus
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // Activer l'onglet et le contenu sélectionné
+            const tabContent = document.getElementById(tabName);
+            const tabButton = document.querySelector(`.tab[data-tab="${tabName}"]`);
+            
+            if (tabContent && tabButton) {
+                tabContent.classList.add('active');
+                tabButton.classList.add('active');
+                
+                // Charger les données spécifiques à l'onglet
+                if (tabName === 'manage-words') {
+                    loadWordsList();
+                } else if (tabName === 'stats') {
+                    loadStats();
+                }
+                
+                // Mettre à jour l'URL hash
+                window.location.hash = tabName;
+            } else {
+                console.error('Onglet non trouvé:', tabName);
+            }
+        }
+
+        // Gestion du formulaire d'ajout/modification
+        document.getElementById('word-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const wordData = {
+                zarmaWord: formData.get('zarmaWord').trim(),
+                frenchMeaning: formData.get('frenchMeaning').trim(),
+                zarmaExample: formData.get('zarmaExample').trim(),
+                frenchExample: formData.get('frenchExample').trim(),
+                category: formData.get('category'),
+                difficultyLevel: parseInt(formData.get('difficultyLevel')),
+                pronunciation: formData.get('pronunciation').trim(),
+                etymology: formData.get('etymology').trim(),
+                synonyms: formData.get('synonyms') ? formData.get('synonyms').split(',').map(s => s.trim()).filter(s => s) : [],
+                antonyms: formData.get('antonyms') ? formData.get('antonyms').split(',').map(s => s.trim()).filter(s => s) : [],
+                relatedWords: formData.get('relatedWords') ? formData.get('relatedWords').split(',').map(s => s.trim()).filter(s => s) : []
+            };
+
+            const submitBtn = document.getElementById('submit-btn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = editingWordId ? 'Modification...' : 'Ajout...';
+
+            try {
+                let response;
+                if (editingWordId) {
+                    response = await authenticatedRequest(`/api/words/${editingWordId}`, {
+                        method: 'PUT',
+                        body: JSON.stringify(wordData)
+                    });
+                } else {
+                    response = await authenticatedRequest('/api/words', {
+                        method: 'POST',
+                        body: JSON.stringify(wordData)
+                    });
+                }
+
+                if (response && response.ok) {
+                    const result = await response.json();
+                    showNotification(editingWordId ? 'Mot modifié avec succès!' : 'Mot ajouté avec succès!');
+                    clearForm();
+                    loadWordsList();
+                } else if (response) {
+                    const error = await response.json();
+                    showNotification(error.message || 'Erreur lors de l\'enregistrement', 'error');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('Erreur lors de l\'enregistrement du mot', 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '💾 Enregistrer le Mot';
+            }
+        });
+
+        // Charger la liste des mots
+        async function loadWordsList() {
+            const container = document.getElementById('words-container');
+            const loading = document.getElementById('words-loading');
+            const searchTerm = document.getElementById('search-words').value.toLowerCase();
+            const categoryFilter = document.getElementById('filter-category').value;
+
+            loading.style.display = 'block';
+            container.innerHTML = '';
+
+            try {
+                let url = '/api/words?';
+                const params = new URLSearchParams();
+                
+                if (searchTerm) params.append('search', searchTerm);
+                if (categoryFilter) params.append('category', categoryFilter);
+
+                const response = await fetch(url + params.toString());
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    allWords = data.words;
+                    displayWords(allWords);
+                    updateCategoryFilter(allWords);
+                } else {
+                    showNotification('Erreur lors du chargement des mots', 'error');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('Erreur de connexion', 'error');
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        // Afficher les mots
+        function displayWords(words) {
+            const container = document.getElementById('words-container');
+            
+            if (words.length === 0) {
+                container.innerHTML = '<div class="no-data">Aucun mot trouvé</div>';
+                return;
+            }
+
+            container.innerHTML = words.map(word => `
+                <div class="word-card">
+                    <div class="word-header">
+                        <div class="word-zarma">${word.zarmaWord}</div>
+                        ${word.category ? `<div class="word-category">${word.category}</div>` : ''}
+                    </div>
+                    <div class="word-meaning">${word.frenchMeaning}</div>
+                    <div class="word-examples">
+                        <strong>Zarma:</strong> ${word.zarmaExample}<br>
+                        <strong>Français:</strong> ${word.frenchExample}
+                    </div>
+                    ${word.pronunciation ? `<div style="margin-top: 10px;"><strong>Prononciation:</strong> [${word.pronunciation}]</div>` : ''}
+                    <div class="word-actions">
+                        <button class="btn btn-secondary" onclick="editWord(${word.id})">✏️ Modifier</button>
+                        <button class="btn btn-danger" onclick="deleteWord(${word.id}, '${word.zarmaWord}')">🗑️ Supprimer</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Mettre à jour le filtre de catégorie
+        function updateCategoryFilter(words) {
+            const filter = document.getElementById('filter-category');
+            const categories = [...new Set(words.map(w => w.category).filter(c => c))];
+            
+            // Garder l'option "Toutes catégories"
+            const currentValue = filter.value;
+            filter.innerHTML = '<option value="">Toutes catégories</option>';
+            
+            categories.forEach(category => {
+                const option = document.createElement('option');
+                option.value = category;
+                option.textContent = category;
+                filter.appendChild(option);
+            });
+            
+            filter.value = currentValue;
+        }
+
+        // Recherche en temps réel
+        document.getElementById('search-words').addEventListener('input', debounce(loadWordsList, 300));
+        document.getElementById('filter-category').addEventListener('change', loadWordsList);
+
+        // Fonction debounce pour éviter trop de requêtes
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // Modifier un mot
+        async function editWord(id) {
+            try {
+                const response = await fetch(`/api/words/${id}`);
+                if (!response.ok) {
+                    throw new Error('Erreur lors du chargement du mot');
+                }
+
+                const word = await response.json();
+                
+                editingWordId = id;
+                
+                // Remplir le formulaire
+                document.getElementById('zarma-word').value = word.zarmaWord;
+                document.getElementById('french-meaning').value = word.frenchMeaning;
+                document.getElementById('zarma-example').value = word.zarmaExample;
+                document.getElementById('french-example').value = word.frenchExample;
+                document.getElementById('category').value = word.category || '';
+                document.getElementById('difficulty').value = word.difficultyLevel || 1;
+                document.getElementById('pronunciation').value = word.pronunciation || '';
+                document.getElementById('etymology').value = word.etymology || '';
+                document.getElementById('synonyms').value = word.synonyms ? word.synonyms.join(', ') : '';
+                document.getElementById('antonyms').value = word.antonyms ? word.antonyms.join(', ') : '';
+                document.getElementById('related-words').value = word.relatedWords ? word.relatedWords.join(', ') : '';
+
+                // Changer le titre
+                document.getElementById('form-title').textContent = 'Modifier le mot: ' + word.zarmaWord;
+                
+                // Aller à l'onglet d'ajout
+                showTab('add-word');
+                
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('Erreur lors du chargement du mot', 'error');
+            }
+        }
+
+        // Supprimer un mot
+        async function deleteWord(id, wordName) {
+            if (!confirm(`Êtes-vous sûr de vouloir supprimer le mot "${wordName}" ?`)) {
+                return;
+            }
+
+            try {
+                const response = await authenticatedRequest(`/api/words/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (response && response.ok) {
+                    showNotification('Mot supprimé avec succès!');
+                    loadWordsList();
+                } else if (response) {
+                    const error = await response.json();
+                    showNotification(error.message || 'Erreur lors de la suppression', 'error');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('Erreur lors de la suppression', 'error');
+            }
+        }
+
+        // Effacer le formulaire
+        function clearForm() {
+            document.getElementById('word-form').reset();
+            editingWordId = null;
+            document.getElementById('form-title').textContent = 'Ajouter un nouveau mot';
+        }
+
+        // Charger les statistiques
+        async function loadStats() {
+            const loading = document.getElementById('stats-loading');
+            const content = document.getElementById('stats-content');
+            
+            loading.style.display = 'block';
+            content.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/stats');
+                
+                if (response.ok) {
+                    const stats = await response.json();
+                    
+                    document.getElementById('total-words').textContent = stats.totalWords || 0;
+                    document.getElementById('total-categories').textContent = stats.totalCategories || 0;
+                    document.getElementById('avg-difficulty').textContent = stats.avgDifficulty || 0;
+                    document.getElementById('completion-rate').textContent = (stats.completionRate || 0) + '%';
+
+                    // Statistiques par catégorie
+                    const categoryStats = document.getElementById('category-stats');
+                    if (stats.categoryDistribution && stats.categoryDistribution.length > 0) {
+                        categoryStats.innerHTML = stats.categoryDistribution.map(cat => `
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; margin: 5px 0; background: #f7fafc; border-radius: 8px;">
+                                <span style="font-weight: 600; text-transform: capitalize;">${cat.category}</span>
+                                <span style="background: #667eea; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.9rem;">${cat.count} mots</span>
+                            </div>
+                        `).join('');
+                    } else {
+                        categoryStats.innerHTML = '<p style="text-align: center; color: #718096;">Aucune donnée disponible</p>';
+                    }
+                    
+                    content.style.display = 'block';
+                } else {
+                    showNotification('Erreur lors du chargement des statistiques', 'error');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('Erreur de connexion', 'error');
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        // Export des données
+        async function exportData(format) {
+            try {
+                const response = await fetch(`/api/export?format=${format}`);
+                
+                if (response.ok) {
+                    // Télécharger le fichier
+                    const blob = await response.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    
+                    const timestamp = new Date().toISOString().split('T')[0];
+                    a.href = url;
+                    a.download = `dictionnaire_zarma_${timestamp}.${format}`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+
+                    showNotification(`Export ${format.toUpperCase()} téléchargé avec succès!`);
+                } else {
+                    showNotification('Erreur lors de l\'export', 'error');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('Erreur lors de l\'export', 'error');
+            }
+        }
+
+        // Import des données
+        async function importData() {
+            const fileInput = document.getElementById('import-file');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showNotification('Veuillez sélectionner un fichier à importer.', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const token = localStorage.getItem('admin_token');
+                const response = await fetch('/api/import', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+
+                if (response && response.ok) {
+                    const result = await response.json();
+                    showNotification(result.message);
+                    fileInput.value = '';
+                    loadWordsList();
+                } else if (response) {
+                    const error = await response.json();
+                    showNotification(error.message || 'Erreur lors de l\'import', 'error');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('Erreur lors de l\'import', 'error');
+            }
+        }
+
+        // Déconnexion
+        async function logout() {
+            const token = localStorage.getItem('admin_token');
+            
+            if (token) {
+                try {
+                    await fetch('/api/auth/logout', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                } catch (error) {
+                    console.error('Erreur lors de la déconnexion:', error);
+                }
+            }
+
+            // Nettoyer le stockage local
+            localStorage.clear();
+            showNotification('Déconnexion réussie');
+            
+            // Rediriger vers la page de connexion
+            setTimeout(() => {
+                window.location.href = 'login.html';
+            }, 1000);
+        }
+
+        // Afficher une notification
+        function showNotification(message, type = 'success') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type}`;
+            notification.classList.add('show');
+
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 4000);
+        }
+
+        // Raccourcis clavier
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey || e.metaKey) {
+                switch(e.key) {
+                    case 's':
+                        e.preventDefault();
+                        document.getElementById('word-form').dispatchEvent(new Event('submit'));
+                        break;
+                    case 'n':
+                        e.preventDefault();
+                        clearForm();
+                        showTab('add-word');
+                        break;
+                    case 'f':
+                        e.preventDefault();
+                        document.getElementById('search-words').focus();
+                        break;
+                }
+            }
+        });
+
+        // Vérification périodique de la session
+        setInterval(() => {
+            const expirationTime = localStorage.getItem('token_expiration');
+            if (expirationTime && Date.now() >= parseInt(expirationTime)) {
+                showNotification('Votre session a expiré', 'error');
+                setTimeout(() => {
+                    logout();
+                }, 2000);
+            }
+        }, 30000); // Vérifier toutes les 30 secondes
+
+        // Support pour la navigation via URL hash
+        window.addEventListener('hashchange', function() {
+            const hash = window.location.hash.substring(1);
+            if (hash && document.getElementById(hash)) {
+                showTab(hash);
+            }
+        });
+    </script>
+</body>
+</html>

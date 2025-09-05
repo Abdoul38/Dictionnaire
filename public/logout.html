@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Déconnexion - Dictionnaire Zarma</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .logout-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .logout-header {
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+            color: white;
+            padding: 40px 30px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .logout-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            transform: rotate(-45deg);
+        }
+
+        .logout-header h1 {
+            font-size: 2.2rem;
+            margin-bottom: 10px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .logout-header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .logout-content {
+            padding: 40px 30px;
+        }
+
+        .logout-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .logout-message {
+            font-size: 1.2rem;
+            color: #4a5568;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        .user-info {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            border-left: 4px solid #667eea;
+        }
+
+        .user-info p {
+            margin: 5px 0;
+            color: #2d3748;
+        }
+
+        .user-info strong {
+            color: #667eea;
+        }
+
+        .logout-actions {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            min-width: 150px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(72, 187, 120, 0.3);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(245, 101, 101, 0.3);
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top: 3px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            background: #f7fafc;
+            color: #718096;
+            font-size: 0.9rem;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .security-notice {
+            background: #fff5f5;
+            border: 1px solid #fed7d7;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        .security-notice h3 {
+            color: #c53030;
+            font-size: 1rem;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .security-notice p {
+            color: #744210;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        .countdown {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+            margin: 20px 0;
+        }
+
+        @media (max-width: 480px) {
+            .logout-container {
+                margin: 10px;
+            }
+            
+            .logout-header {
+                padding: 30px 20px;
+            }
+            
+            .logout-header h1 {
+                font-size: 1.8rem;
+            }
+            
+            .logout-content {
+                padding: 30px 20px;
+            }
+            
+            .logout-actions {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+            }
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+            z-index: 1000;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+            max-width: 300px;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification.success {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+        }
+
+        .notification.error {
+            background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+        }
+    </style>
+</head>
+<body>
+    <div class="logout-container">
+        <div class="logout-header">
+            <h1>👋 Déconnexion</h1>
+            <p>Dictionnaire Zarma-Français</p>
+        </div>
+
+        <div class="logout-content">
+            <div class="logout-icon">🔒</div>
+            
+            <div class="logout-message">
+                <p>Vous êtes sur le point de vous déconnecter de l'administration du dictionnaire.</p>
+            </div>
+
+            <div class="user-info" id="userInfo">
+                <p><strong>Utilisateur:</strong> <span id="currentUser">Chargement...</span></p>
+                <p><strong>Rôle:</strong> <span id="userRole">Chargement...</span></p>
+                <p><strong>Dernière connexion:</strong> <span id="lastLogin">Chargement...</span></p>
+            </div>
+
+            <div class="countdown" id="countdown">
+                Redirection dans 5 secondes...
+            </div>
+
+            <div class="logout-actions">
+                <button class="btn btn-primary" onclick="cancelLogout()">
+                    <span id="cancelText">↶ Annuler</span>
+                </button>
+                <button class="btn btn-danger" onclick="confirmLogout()">
+                    <span id="logoutText">🚪 Se déconnecter</span>
+                </button>
+            </div>
+
+            <div class="security-notice">
+                <h3>🛡️ Sécurité</h3>
+                <p>Pour votre sécurité, toutes les sessions seront fermées. Vous devrez vous reconnecter pour accéder à l'administration.</p>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>&copy; 2024 Dictionnaire Zarma. Tous droits réservés.</p>
+        </div>
+    </div>
+
+    <!-- Notification -->
+    <div id="notification" class="notification"></div>
+
+    <script>
+        let currentUser = null;
+        let logoutTimer = null;
+        let countdownValue = 5;
+        let isLoggingOut = false;
+
+        // Au chargement de la page
+        window.addEventListener('load', function() {
+            loadUserInfo();
+            startAutoLogout();
+        });
+
+        // Charger les informations utilisateur
+        function loadUserInfo() {
+            const token = localStorage.getItem('admin_token');
+            const userData = localStorage.getItem('admin_user');
+            const lastLogin = localStorage.getItem('last_login');
+
+            if (userData) {
+                try {
+                    currentUser = JSON.parse(userData);
+                    document.getElementById('currentUser').textContent = currentUser.username || 'Inconnu';
+                    document.getElementById('userRole').textContent = currentUser.role || 'Utilisateur';
+                    
+                    if (lastLogin) {
+                        const loginDate = new Date(parseInt(lastLogin));
+                        document.getElementById('lastLogin').textContent = loginDate.toLocaleString('fr-FR');
+                    } else {
+                        document.getElementById('lastLogin').textContent = 'Non disponible';
+                    }
+                } catch (error) {
+                    console.error('Erreur lors du parsing des données utilisateur:', error);
+                    redirectToLogin();
+                }
+            } else {
+                redirectToLogin();
+            }
+
+            // Vérifier la validité du token
+            if (!token) {
+                redirectToLogin();
+            }
+        }
+
+        // Déconnexion automatique après 5 secondes
+        function startAutoLogout() {
+            const countdownElement = document.getElementById('countdown');
+            
+            logoutTimer = setInterval(() => {
+                countdownValue--;
+                
+                if (countdownValue > 0) {
+                    countdownElement.textContent = `Redirection dans ${countdownValue} seconde${countdownValue > 1 ? 's' : ''}...`;
+                } else {
+                    clearInterval(logoutTimer);
+                    performLogout();
+                }
+            }, 1000);
+        }
+
+        // Annuler la déconnexion
+        function cancelLogout() {
+            if (logoutTimer) {
+                clearInterval(logoutTimer);
+            }
+            
+            showNotification('Déconnexion annulée', 'success');
+            
+            // Rediriger vers le tableau de bord après un court délai
+            setTimeout(() => {
+                window.location.href = 'index.html';
+            }, 1500);
+        }
+
+        // Confirmer la déconnexion immédiate
+        function confirmLogout() {
+            if (logoutTimer) {
+                clearInterval(logoutTimer);
+            }
+            performLogout();
+        }
+
+        // Effectuer la déconnexion
+        async function performLogout() {
+            if (isLoggingOut) return;
+            
+            isLoggingOut = true;
+            
+            const logoutBtn = document.querySelector('.btn-danger');
+            const logoutText = document.getElementById('logoutText');
+            
+            // Afficher l'indicateur de chargement
+            logoutBtn.disabled = true;
+            logoutText.innerHTML = '<div class="loading"></div> Déconnexion...';
+
+            const token = localStorage.getItem('admin_token');
+            
+            try {
+                // Appeler l'API de déconnexion si un token existe
+                if (token) {
+                    const response = await fetch('/api/auth/logout', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+
+                    if (!response.ok) {
+                        console.warn('Erreur lors de la déconnexion API, mais nettoyage local effectué');
+                    }
+                }
+            } catch (error) {
+                console.warn('Erreur de connexion lors de la déconnexion API:', error);
+            } finally {
+                // Nettoyer le stockage local dans tous les cas
+                localStorage.removeItem('admin_token');
+                localStorage.removeItem('token_expiration');
+                localStorage.removeItem('admin_user');
+                localStorage.removeItem('last_login');
+
+                showNotification('Déconnexion réussie !', 'success');
+                
+                // Rediriger vers la page de connexion après un court délai
+                setTimeout(() => {
+                    window.location.href = 'login.html';
+                }, 1000);
+            }
+        }
+
+        // Rediriger vers la page de connexion
+        function redirectToLogin() {
+            window.location.href = 'login.html';
+        }
+
+        // Afficher une notification
+        function showNotification(message, type = 'success') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type}`;
+            notification.classList.add('show');
+
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+
+        // Empêcher le retour en arrière
+        history.pushState(null, null, location.href);
+        window.onpopstate = function() {
+            history.go(1);
+        };
+
+        // Raccourci clavier pour annuler (Échap)
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                cancelLogout();
+            }
+        });
+
+        // Nettoyage si l'utilisateur quitte la page
+        window.addEventListener('beforeunload', function() {
+            if (logoutTimer) {
+                clearInterval(logoutTimer);
+            }
+        });
+    </script>
+</body>
+</html>

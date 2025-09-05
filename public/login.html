@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connexion - Administration Dictionnaire Zarma</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .login-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            width: 100%;
+            max-width: 400px;
+            animation: slideIn 0.6s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .login-header {
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+            color: white;
+            padding: 40px 30px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .login-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            transform: rotate(-45deg);
+        }
+
+        .login-header h1 {
+            font-size: 2rem;
+            margin-bottom: 8px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .login-header p {
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+        }
+
+        .login-form {
+            padding: 40px 30px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 15px 20px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            background: #f8fafc;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            background: white;
+        }
+
+        .password-container {
+            position: relative;
+        }
+
+        .password-toggle {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #718096;
+            font-size: 1.2rem;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .login-btn:active {
+            transform: translateY(0);
+        }
+
+        .login-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .loading::after {
+            content: '';
+            width: 20px;
+            height: 20px;
+            border: 2px solid transparent;
+            border-top: 2px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: 500;
+            display: none;
+            animation: shake 0.5s ease-in-out;
+        }
+
+        @keyframes shake {
+            0%, 20%, 40%, 60%, 80% { transform: translateX(0); }
+            10%, 30%, 50%, 70% { transform: translateX(-5px); }
+            90% { transform: translateX(5px); }
+        }
+
+        .success-message {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: 500;
+            display: none;
+        }
+
+        .remember-me {
+            display: flex;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+
+        .remember-me input[type="checkbox"] {
+            margin-right: 10px;
+            transform: scale(1.2);
+        }
+
+        .remember-me label {
+            font-size: 0.9rem;
+            color: #4a5568;
+            margin-bottom: 0;
+            text-transform: none;
+            letter-spacing: normal;
+            font-weight: normal;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            background: #f7fafc;
+            color: #718096;
+            font-size: 0.9rem;
+        }
+
+        .security-notice h3 {
+            color: #2c7a7b;
+            font-size: 0.9rem;
+            margin-bottom: 5px;
+        }
+
+        .security-notice p {
+            color: #285e61;
+            font-size: 0.8rem;
+            line-height: 1.4;
+        }
+
+        @media (max-width: 480px) {
+            .login-container {
+                margin: 10px;
+            }
+            
+            .login-header {
+                padding: 30px 20px;
+            }
+            
+            .login-header h1 {
+                font-size: 1.6rem;
+            }
+            
+            .login-form {
+                padding: 30px 20px;
+            }
+        }
+
+        .attempts-warning {
+            background: #fff5b4;
+            border: 1px solid #f6e05e;
+            color: #744210;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <h1>🔐 Administration</h1>
+            <p>Dictionnaire Zarma-Français</p>
+        </div>
+
+        <form class="login-form" id="loginForm">
+            <div class="error-message" id="errorMessage"></div>
+            <div class="success-message" id="successMessage"></div>
+            <div class="attempts-warning" id="attemptsWarning"></div>
+
+            <div class="form-group">
+                <label for="username">Nom d'utilisateur</label>
+                <input 
+                    type="text" 
+                    id="username" 
+                    name="username" 
+                    required 
+                    autocomplete="username"
+                    placeholder="Entrez votre nom d'utilisateur"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="password">Mot de passe</label>
+                <div class="password-container">
+                    <input 
+                        type="password" 
+                        id="password" 
+                        name="password" 
+                        required 
+                        autocomplete="current-password"
+                        placeholder="Entrez votre mot de passe"
+                    >
+                    <button type="button" class="password-toggle" onclick="togglePassword()">
+                        👁️
+                    </button>
+                </div>
+            </div>
+
+            <div class="remember-me">
+                <input type="checkbox" id="rememberMe" name="rememberMe">
+                <label for="rememberMe">Se souvenir de moi</label>
+            </div>
+
+            <button type="submit" class="login-btn" id="loginBtn">
+                <span id="loginText">Se connecter</span>
+                <div class="loading" id="loading"></div>
+            </button>
+        </form>
+
+        <div class="security-notice">
+            <h3>🛡️ Sécurité</h3>
+            <p>Vos données sont protégées. Après 5 tentatives infructueuses, votre adresse IP sera temporairement bloquée.</p>
+        </div>
+
+        <div class="footer">
+            <p>&copy; 2024 Dictionnaire Zarma. Tous droits réservés.</p>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const MAX_ATTEMPTS = 5;
+        const LOCKOUT_TIME = 15 * 60 * 1000; // 15 minutes en millisecondes
+
+        // Vérifier si l'utilisateur est déjà connecté
+        window.addEventListener('load', function() {
+            const token = localStorage.getItem('admin_token');
+            const expirationTime = localStorage.getItem('token_expiration');
+            
+            if (token && expirationTime && Date.now() < parseInt(expirationTime)) {
+                // Token valide, rediriger vers le dashboard
+                window.location.href = '/';
+            }
+            
+            checkLockoutStatus();
+        });
+
+        // Vérifier le statut de verrouillage
+        function checkLockoutStatus() {
+            const lockoutEnd = localStorage.getItem('lockout_end');
+            const attempts = parseInt(localStorage.getItem('login_attempts') || '0');
+            
+            if (lockoutEnd && Date.now() < parseInt(lockoutEnd)) {
+                const remainingTime = Math.ceil((parseInt(lockoutEnd) - Date.now()) / 1000 / 60);
+                showError(`Compte temporairement bloqué. Réessayez dans ${remainingTime} minute(s).`);
+                document.getElementById('loginBtn').disabled = true;
+                return;
+            }
+            
+            if (attempts >= 3) {
+                showAttemptsWarning(`Attention: ${attempts}/${MAX_ATTEMPTS} tentatives utilisées.`);
+            }
+        }
+
+        // Gestion du formulaire de connexion
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Vérifier le verrouillage
+            const lockoutEnd = localStorage.getItem('lockout_end');
+            if (lockoutEnd && Date.now() < parseInt(lockoutEnd)) {
+                showError('Compte temporairement bloqué.');
+                return;
+            }
+            
+            const formData = new FormData(e.target);
+            const credentials = {
+                username: formData.get('username').trim(),
+                password: formData.get('password'),
+                rememberMe: formData.get('rememberMe') === 'on'
+            };
+            
+            // Validation côté client
+            if (!credentials.username || !credentials.password) {
+                showError('Veuillez remplir tous les champs.');
+                return;
+            }
+            
+            await login(credentials);
+        });
+
+        // Fonction de connexion
+        async function login(credentials) {
+            const loginBtn = document.getElementById('loginBtn');
+            const loginText = document.getElementById('loginText');
+            const loading = document.getElementById('loading');
+            
+            // Afficher le loading
+            loginBtn.disabled = true;
+            loginText.style.display = 'none';
+            loading.style.display = 'block';
+            
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(credentials)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    // Connexion réussie
+                    handleLoginSuccess(result, credentials.rememberMe);
+                } else {
+                    // Connexion échouée
+                    handleLoginFailure(result.message || 'Identifiants incorrects');
+                }
+                
+            } catch (error) {
+                console.error('Erreur de connexion:', error);
+                handleLoginFailure('Erreur de connexion au serveur. Vérifiez votre connexion internet.');
+            } finally {
+                // Masquer le loading
+                loginBtn.disabled = false;
+                loginText.style.display = 'block';
+                loading.style.display = 'none';
+            }
+        }
+
+        // Gestion du succès de connexion
+        function handleLoginSuccess(result, rememberMe) {
+            // Réinitialiser les tentatives
+            localStorage.removeItem('login_attempts');
+            localStorage.removeItem('lockout_end');
+            
+            // Stocker le token
+            const expirationTime = rememberMe 
+                ? Date.now() + (30 * 24 * 60 * 60 * 1000) // 30 jours
+                : Date.now() + (8 * 60 * 60 * 1000); // 8 heures
+            
+            localStorage.setItem('admin_token', result.token);
+            localStorage.setItem('token_expiration', expirationTime.toString());
+            localStorage.setItem('admin_user', JSON.stringify(result.user));
+            
+            showSuccess('Connexion réussie ! Redirection...');
+            
+            // Redirection vers le dashboard après un court délai
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 1000);
+        }
+
+        // Gestion de l'échec de connexion
+        function handleLoginFailure(message) {
+            let attempts = parseInt(localStorage.getItem('login_attempts') || '0');
+            attempts++;
+            localStorage.setItem('login_attempts', attempts.toString());
+            
+            if (attempts >= MAX_ATTEMPTS) {
+                // Verrouillage du compte
+                const lockoutEnd = Date.now() + LOCKOUT_TIME;
+                localStorage.setItem('lockout_end', lockoutEnd.toString());
+                showError(`Trop de tentatives échouées. Compte bloqué pendant 15 minutes.`);
+                document.getElementById('loginBtn').disabled = true;
+            } else {
+                const remainingAttempts = MAX_ATTEMPTS - attempts;
+                showError(`${message} (${remainingAttempts} tentative(s) restante(s))`);
+                
+                if (attempts >= 3) {
+                    showAttemptsWarning(`Attention: ${attempts}/${MAX_ATTEMPTS} tentatives utilisées.`);
+                }
+            }
+        }
+
+        // Fonctions d'affichage des messages
+        function showError(message) {
+            const errorElement = document.getElementById('errorMessage');
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+            hideSuccess();
+            
+            setTimeout(() => {
+                errorElement.style.display = 'none';
+            }, 5000);
+        }
+
+        function showSuccess(message) {
+            const successElement = document.getElementById('successMessage');
+            successElement.textContent = message;
+            successElement.style.display = 'block';
+            hideError();
+        }
+
+        function showAttemptsWarning(message) {
+            const warningElement = document.getElementById('attemptsWarning');
+            warningElement.textContent = message;
+            warningElement.style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+
+        function hideSuccess() {
+            document.getElementById('successMessage').style.display = 'none';
+        }
+
+        // Basculer la visibilité du mot de passe
+        function togglePassword() {
+            const passwordInput = document.getElementById('password');
+            const toggleBtn = document.querySelector('.password-toggle');
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                toggleBtn.textContent = '🙈';
+            } else {
+                passwordInput.type = 'password';
+                toggleBtn.textContent = '👁️';
+            }
+        }
+
+        // Nettoyage automatique des données de verrouillage expirées
+        setInterval(() => {
+            const lockoutEnd = localStorage.getItem('lockout_end');
+            if (lockoutEnd && Date.now() >= parseInt(lockoutEnd)) {
+                localStorage.removeItem('lockout_end');
+                localStorage.removeItem('login_attempts');
+                document.getElementById('loginBtn').disabled = false;
+                document.getElementById('attemptsWarning').style.display = 'none';
+            }
+        }, 60000); // Vérifier chaque minute
+
+        // Gestion des raccourcis clavier
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !document.getElementById('loginBtn').disabled) {
+                document.getElementById('loginForm').dispatchEvent(new Event('submit'));
+            }
+        });
+
+        // Nettoyage des messages d'erreur lors de la saisie
+        document.getElementById('username').addEventListener('input', hideMessages);
+        document.getElementById('password').addEventListener('input', hideMessages);
+
+        function hideMessages() {
+            hideError();
+            hideSuccess();
+        }
+    </script>
+</body>
+</html> 
