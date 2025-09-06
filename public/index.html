@@ -578,8 +578,20 @@
         </div>
     </div>
 
-    <!-- Notification -->
-    <div id="notification" class="notification"></div>
+         <div id="notification" class="notification"></div>
+
+    <!-- Modal d'avertissement de déconnexion -->
+    <div id="logout-warning" class="modal">
+        <div class="modal-content">
+            <h3>Session sur le point d'expirer</h3>
+            <p>Vous serez déconnecté automatiquement dans <span id="countdown" class="countdown">60</span> secondes pour des raisons de sécurité.</p>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" onclick="extendSession()">Rester connecté</button>
+                
+                <button class="logout-btn" onclick="logout()">Déconnexion</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         // Variables globales
@@ -587,12 +599,72 @@
         let editingWordId = null;
         let allWords = [];
         let allCategories = [];
+        
+        // Variables pour la déconnexion automatique
+        let inactivityTimer;
+        let warningTimer;
+        const LOGOUT_TIME = 3 * 60 * 1000; // 3 minutes en millisecondes
+        const WARNING_TIME = 60 * 1000; // 1 minute avant déconnexion
 
         // Vérification de l'authentification au chargement
         window.addEventListener('load', function() {
             checkAuthentication();
-            setupTabNavigation(); // Initialiser la navigation par onglets
+            setupTabNavigation();
+            setupActivityListeners(); // Initialiser les écouteurs d'activité
         });
+
+        // Initialiser les écouteurs d'activité pour détecter l'inactivité
+        function setupActivityListeners() {
+            // Événements qui indiquent une activité utilisateur
+            const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click', 'input'];
+            
+            events.forEach(event => {
+                document.addEventListener(event, resetInactivityTimer, true);
+            });
+            
+            // Démarrer le minuteur d'inactivité
+            resetInactivityTimer();
+        }
+
+        // Réinitialiser le minuteur d'inactivité
+        function resetInactivityTimer() {
+            // Effacer les minuteurs existants
+            clearTimeout(inactivityTimer);
+            clearTimeout(warningTimer);
+            document.getElementById('logout-warning').style.display = 'none';
+            
+            // Définir un nouveau minuteur pour afficher l'avertissement
+            warningTimer = setTimeout(showLogoutWarning, LOGOUT_TIME - WARNING_TIME);
+            
+            // Définir un nouveau minuteur pour la déconnexion automatique
+            inactivityTimer = setTimeout(logout, LOGOUT_TIME);
+        }
+
+        // Afficher l'avertissement de déconnexion
+        function showLogoutWarning() {
+            const modal = document.getElementById('logout-warning');
+            const countdownElement = document.getElementById('countdown');
+            
+            modal.style.display = 'flex';
+            
+            // Mettre à jour le compte à rebours
+            let secondsLeft = WARNING_TIME / 1000;
+            const countdownInterval = setInterval(() => {
+                secondsLeft--;
+                countdownElement.textContent = secondsLeft;
+                
+                if (secondsLeft <= 0) {
+                    clearInterval(countdownInterval);
+                }
+            }, 1000);
+        }
+
+        // Prolonger la session
+        function extendSession() {
+            document.getElementById('logout-warning').style.display = 'none';
+            resetInactivityTimer();
+            showNotification('Session prolongée');
+        }
 
         // Configuration de la navigation par onglets
         function setupTabNavigation() {
@@ -896,67 +968,6 @@
             };
         }
 
-        // Modifier un mot
-        async function editWord(id) {
-            try {
-                const response = await fetch(`/api/words/${id}`);
-                if (!response.ok) {
-                    throw new Error('Erreur lors du chargement du mot');
-                }
-
-                const word = await response.json();
-                
-                editingWordId = id;
-                
-                // Remplir le formulaire
-                document.getElementById('zarma-word').value = word.zarmaWord;
-                document.getElementById('french-meaning').value = word.frenchMeaning;
-                document.getElementById('zarma-example').value = word.zarmaExample;
-                document.getElementById('french-example').value = word.frenchExample;
-                document.getElementById('category').value = word.category || '';
-                document.getElementById('difficulty').value = word.difficultyLevel || 1;
-                document.getElementById('pronunciation').value = word.pronunciation || '';
-                document.getElementById('etymology').value = word.etymology || '';
-                document.getElementById('synonyms').value = word.synonyms ? word.synonyms.join(', ') : '';
-                document.getElementById('antonyms').value = word.antonyms ? word.antonyms.join(', ') : '';
-                document.getElementById('related-words').value = word.relatedWords ? word.relatedWords.join(', ') : '';
-
-                // Changer le titre
-                document.getElementById('form-title').textContent = 'Modifier le mot: ' + word.zarmaWord;
-                
-                // Aller à l'onglet d'ajout
-                showTab('add-word');
-                
-            } catch (error) {
-                console.error('Erreur:', error);
-                showNotification('Erreur lors du chargement du mot', 'error');
-            }
-        }
-
-        // Supprimer un mot
-        async function deleteWord(id, wordName) {
-            if (!confirm(`Êtes-vous sûr de vouloir supprimer le mot "${wordName}" ?`)) {
-                return;
-            }
-
-            try {
-                const response = await authenticatedRequest(`/api/words/${id}`, {
-                    method: 'DELETE'
-                });
-
-                if (response && response.ok) {
-                    showNotification('Mot supprimé avec succès!');
-                    loadWordsList();
-                } else if (response) {
-                    const error = await response.json();
-                    showNotification(error.message || 'Erreur lors de la suppression', 'error');
-                }
-            } catch (error) {
-                console.error('Erreur:', error);
-                showNotification('Erreur lors de la suppression', 'error');
-            }
-        }
-
         // Effacer le formulaire
         function clearForm() {
             document.getElementById('word-form').reset();
@@ -1008,99 +1019,289 @@
             }
         }
 
-        // Export des données
-        async function exportData(format) {
+       
+// Corrections à apporter dans le script de index.html
+
+// Remplacer la fonction loadStats existante par celle-ci :
+async function loadStats() {
+    const loading = document.getElementById('stats-loading');
+    const content = document.getElementById('stats-content');
+    
+    loading.style.display = 'block';
+    content.style.display = 'none';
+
+    try {
+        const response = await authenticatedRequest('/api/stats');
+        
+        if (response && response.ok) {
+            const stats = await response.json();
+            
+            document.getElementById('total-words').textContent = stats.totalWords || 0;
+            document.getElementById('total-categories').textContent = stats.totalCategories || 0;
+            document.getElementById('avg-difficulty').textContent = stats.avgDifficulty || '0.0';
+            document.getElementById('completion-rate').textContent = (stats.completionRate || 0) + '%';
+
+            // Statistiques par catégorie
+            const categoryStats = document.getElementById('category-stats');
+            if (stats.categoryDistribution && stats.categoryDistribution.length > 0) {
+                categoryStats.innerHTML = stats.categoryDistribution.map(cat => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; margin: 5px 0; background: #f7fafc; border-radius: 8px;">
+                        <span style="font-weight: 600; text-transform: capitalize;">${cat.category || 'Non catégorisé'}</span>
+                        <span style="background: #667eea; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.9rem;">${cat.count} mots</span>
+                    </div>
+                `).join('');
+            } else {
+                categoryStats.innerHTML = '<p style="text-align: center; color: #718096;">Aucune donnée disponible</p>';
+            }
+            
+            content.style.display = 'block';
+        } else {
+            showNotification('Erreur lors du chargement des statistiques', 'error');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showNotification('Erreur de connexion', 'error');
+    } finally {
+        loading.style.display = 'none';
+    }
+}
+
+// Modifier la fonction editWord pour corriger l'affichage des données :
+async function editWord(id) {
+    try {
+        const response = await authenticatedRequest(`/api/words/${id}`);
+        
+        if (!response || !response.ok) {
+            throw new Error('Erreur lors du chargement du mot');
+        }
+
+        const word = await response.json();
+        
+        editingWordId = id;
+        
+        // Remplir le formulaire avec les bonnes propriétés
+        document.getElementById('zarma-word').value = word.zarmaWord || '';
+        document.getElementById('french-meaning').value = word.frenchMeaning || '';
+        document.getElementById('zarma-example').value = word.zarmaExample || '';
+        document.getElementById('french-example').value = word.frenchExample || '';
+        document.getElementById('category').value = word.category || '';
+        document.getElementById('difficulty').value = word.difficultyLevel || 1;
+        document.getElementById('pronunciation').value = word.pronunciation || '';
+        document.getElementById('etymology').value = word.etymology || '';
+        
+        // Gérer les tableaux pour synonymes, antonymes, mots liés
+        document.getElementById('synonyms').value = Array.isArray(word.synonyms) ? word.synonyms.join(', ') : (word.synonyms || '');
+        document.getElementById('antonyms').value = Array.isArray(word.antonyms) ? word.antonyms.join(', ') : (word.antonyms || '');
+        document.getElementById('related-words').value = Array.isArray(word.relatedWords) ? word.relatedWords.join(', ') : (word.relatedWords || '');
+
+        // Changer le titre et le bouton
+        document.getElementById('form-title').textContent = 'Modifier le mot: ' + word.zarmaWord;
+        document.getElementById('submit-btn').textContent = '✏️ Modifier le Mot';
+        
+        // Aller à l'onglet d'ajout
+        showTab('add-word');
+        
+        showNotification('Mot chargé pour modification');
+        
+    } catch (error) {
+        console.error('Erreur:', error);
+        showNotification('Erreur lors du chargement du mot', 'error');
+    }
+}
+
+// Corriger la fonction de suppression :
+async function deleteWord(id, wordName) {
+    if (!confirm(`Êtes-vous sûr de vouloir supprimer le mot "${wordName}" ?\n\nCette action est irréversible.`)) {
+        return;
+    }
+
+    const confirmDelete = confirm('Confirmation finale : voulez-vous vraiment supprimer ce mot ?');
+    if (!confirmDelete) {
+        return;
+    }
+
+    try {
+        const response = await authenticatedRequest(`/api/words/${id}`, {
+            method: 'DELETE'
+        });
+
+        if (response && response.ok) {
+            showNotification('Mot supprimé avec succès!');
+            loadWordsList();
+            
+            // Si on était en train d'éditer ce mot, clear le form
+            if (editingWordId == id) {
+                clearForm();
+            }
+        } else if (response) {
+            const errorText = await response.text();
+            let errorMessage;
             try {
-                const response = await fetch(`/api/export?format=${format}`);
-                
-                if (response.ok) {
-                    // Télécharger le fichier
-                    const blob = await response.blob();
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    
-                    const timestamp = new Date().toISOString().split('T')[0];
-                    a.href = url;
-                    a.download = `dictionnaire_zarma_${timestamp}.${format}`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-
-                    showNotification(`Export ${format.toUpperCase()} téléchargé avec succès!`);
-                } else {
-                    showNotification('Erreur lors de l\'export', 'error');
-                }
-            } catch (error) {
-                console.error('Erreur:', error);
-                showNotification('Erreur lors de l\'export', 'error');
+                const error = JSON.parse(errorText);
+                errorMessage = error.message || error.error || 'Erreur lors de la suppression';
+            } catch {
+                errorMessage = 'Erreur lors de la suppression';
             }
+            showNotification(errorMessage, 'error');
+        } else {
+            showNotification('Erreur de connexion lors de la suppression', 'error');
         }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showNotification('Erreur lors de la suppression du mot', 'error');
+    }
+}
 
-        // Import des données
-        async function importData() {
-            const fileInput = document.getElementById('import-file');
-            const file = fileInput.files[0];
+// Corriger la fonction exportData :
+async function exportData(format) {
+    try {
+        showNotification('Préparation de l\'export...', 'success');
+        
+        const response = await authenticatedRequest(`/api/export?format=${format}`);
+        
+        if (response && response.ok) {
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
             
-            if (!file) {
-                showNotification('Veuillez sélectionner un fichier à importer.', 'error');
-                return;
+            const timestamp = new Date().toISOString().split('T')[0];
+            a.href = url;
+            a.download = `dictionnaire_zarma_${timestamp}.${format}`;
+            a.style.display = 'none';
+            
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            showNotification(`Export ${format.toUpperCase()} téléchargé avec succès!`);
+        } else {
+            const errorText = await response.text();
+            console.error('Erreur export:', errorText);
+            showNotification('Erreur lors de l\'export', 'error');
+        }
+    } catch (error) {
+        console.error('Erreur export:', error);
+        showNotification('Erreur lors de l\'export: ' + error.message, 'error');
+    }
+}
+
+// Corriger la fonction importData :
+async function importData() {
+    const fileInput = document.getElementById('import-file');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        showNotification('Veuillez sélectionner un fichier à importer.', 'error');
+        return;
+    }
+
+    // Vérifier le format du fichier
+    const fileExtension = file.name.split('.').pop().toLowerCase();
+    if (!['json', 'csv'].includes(fileExtension)) {
+        showNotification('Format de fichier non supporté. Utilisez JSON ou CSV.', 'error');
+        return;
+    }
+
+    if (!confirm(`Êtes-vous sûr de vouloir importer des données depuis ${file.name} ?\n\nCela peut ajouter de nouveaux mots au dictionnaire.`)) {
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        showNotification('Import en cours...', 'success');
+        
+        const token = localStorage.getItem('admin_token');
+        const response = await fetch('/api/import', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData
+        });
+
+        if (response && response.ok) {
+            const result = await response.json();
+            showNotification(result.message || 'Import réussi');
+            fileInput.value = '';
+            
+            // Recharger la liste des mots si on est sur cet onglet
+            if (document.getElementById('manage-words').classList.contains('active')) {
+                loadWordsList();
             }
-
-            const formData = new FormData();
-            formData.append('file', file);
-
+        } else if (response) {
+            const errorText = await response.text();
+            let errorMessage;
             try {
-                const token = localStorage.getItem('admin_token');
-                const response = await fetch('/api/import', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: formData
-                });
-
-                if (response && response.ok) {
-                    const result = await response.json();
-                    showNotification(result.message);
-                    fileInput.value = '';
-                    loadWordsList();
-                } else if (response) {
-                    const error = await response.json();
-                    showNotification(error.message || 'Erreur lors de l\'import', 'error');
-                }
-            } catch (error) {
-                console.error('Erreur:', error);
-                showNotification('Erreur lors de l\'import', 'error');
+                const error = JSON.parse(errorText);
+                errorMessage = error.error || error.message || 'Erreur lors de l\'import';
+            } catch {
+                errorMessage = 'Erreur lors de l\'import';
             }
+            showNotification(errorMessage, 'error');
+        } else {
+            showNotification('Erreur de connexion lors de l\'import', 'error');
         }
+    } catch (error) {
+        console.error('Erreur import:', error);
+        showNotification('Erreur lors de l\'import: ' + error.message, 'error');
+    }
+}
 
-        // Déconnexion
-        async function logout() {
-            const token = localStorage.getItem('admin_token');
-            
-            if (token) {
-                try {
-                    await fetch('/api/auth/logout', {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${token}`
-                        }
-                    });
-                } catch (error) {
-                    console.error('Erreur lors de la déconnexion:', error);
+// Améliorer la fonction clearForm :
+function clearForm() {
+    document.getElementById('word-form').reset();
+    editingWordId = null;
+    document.getElementById('form-title').textContent = 'Ajouter un nouveau mot';
+    document.getElementById('submit-btn').textContent = '💾 Enregistrer le Mot';
+    
+    // Remettre les valeurs par défaut
+    document.getElementById('difficulty').value = '1';
+}
+
+// Corriger la fonction logout :
+async function logout() {
+    // Effacer les minuteurs
+    clearTimeout(inactivityTimer);
+    clearTimeout(warningTimer);
+    const logoutWarning = document.getElementById('logout-warning');
+    if (logoutWarning) {
+        logoutWarning.style.display = 'none';
+    }
+    
+    const token = localStorage.getItem('admin_token');
+    
+    // Appeler l'API de déconnexion si on a un token
+    if (token) {
+        try {
+            await fetch('/api/auth/logout', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
                 }
-            }
-
-            // Nettoyer le stockage local
-            localStorage.clear();
-            showNotification('Déconnexion réussie');
-            
-            // Rediriger vers la page de connexion
-            setTimeout(() => {
-                window.location.href = 'login.html';
-            }, 1000);
+            });
+        } catch (error) {
+            console.error('Erreur lors de la déconnexion API:', error);
         }
+    }
+
+    // Nettoyer le stockage local
+    localStorage.removeItem('admin_token');
+    localStorage.removeItem('token_expiration');
+    localStorage.removeItem('admin_user');
+    localStorage.removeItem('last_login');
+    
+    showNotification('Déconnexion réussie');
+    
+    // Rediriger vers la page de connexion
+    setTimeout(() => {
+        window.location.href = 'logout.html';
+    }, 1000);
+}
+        // Déconnexion - FONCTION AJOUTÉ
 
         // Afficher une notification
         function showNotification(message, type = 'success') {
@@ -1133,6 +1334,9 @@
                         break;
                 }
             }
+            
+            // Réinitialiser le minuteur d'inactivité à chaque frappe
+            resetInactivityTimer();
         });
 
         // Vérification périodique de la session
@@ -1153,6 +1357,7 @@
                 showTab(hash);
             }
         });
+
     </script>
 </body>
 </html>
