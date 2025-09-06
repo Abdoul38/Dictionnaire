@@ -1,4 +1,4 @@
-// server.js - Version corrigée pour Render.com avec PostgreSQL
+// server-postgresql.js - Version avec PostgreSQL pour base centralisée
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -14,12 +14,10 @@ const { body, validationResult } = require('express-validator');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Configuration de la base de données PostgreSQL pour Render
+// Configuration de la base de données PostgreSQL
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
+  connectionString: process.env.DATABASE_URL || 'postgresql://username:password@localhost:5432/dictionnaire_zarma',
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
 // Configuration sécurisée
@@ -110,10 +108,6 @@ app.use('/api', apiLimiter);
 // Initialisation de la base de données PostgreSQL
 async function initializeDatabase() {
   try {
-    // Test de connexion à la base de données
-    await pool.query('SELECT NOW()');
-    console.log('✅ Connexion à PostgreSQL établie avec succès');
-
     // Créer les tables
     await pool.query(`
       CREATE TABLE IF NOT EXISTS admin_users(
@@ -238,10 +232,7 @@ async function initializeDatabase() {
 
   } catch (error) {
     console.error('❌ Erreur lors de l\'initialisation de la base de données:', error);
-    // Ne pas quitter le processus en production pour permettre les redémarrages
-    if (process.env.NODE_ENV !== 'production') {
-      process.exit(1);
-    }
+    process.exit(1);
   }
 }
 
@@ -626,6 +617,59 @@ app.post('/api/sync', async (req, res) => {
   }
 });
 
+// Démarrage du serveur
+const os = require('os');
+
+function getLocalIP() {
+  const interfaces = os.networkInterfaces();
+  for (const devName in interfaces) {
+    const iface = interfaces[devName];
+    for (let i = 0; i < iface.length; i++) {
+      const alias = iface[i];
+      if (alias.family === 'IPv4' && alias.address !== '127.0.0.1' && !alias.internal) {
+        return alias.address;
+      }
+    }
+  }
+  return '127.0.0.1';
+}
+
+async function startServer() {
+  try {
+    // Initialiser la base de données
+    await initializeDatabase();
+    
+    // Démarrer le serveur
+    app.listen(PORT, '0.0.0.0', () => {
+      const localIP = getLocalIP();
+      
+      console.log(`🚀 Serveur API Dictionnaire Zarma (PostgreSQL) démarré sur le port ${PORT}`);
+      console.log(`📱 Interface d'administration: http://localhost:${PORT}`);
+      console.log(`🌍 Accessible localement sur: http://${localIP}:${PORT}`);
+      console.log(`🔗 API disponible sur: http://${localIP}:${PORT}/api`);
+      console.log(`📱 Pour mobile/émulateur: http://${localIP}:${PORT}/api`);
+      console.log(`🔐 Authentification requise pour les routes d'administration`);
+      console.log(`\n📍 Utilisez cette IP dans votre app Flutter: ${localIP}`);
+      console.log(`🧪 Test de l'API: http://${localIP}:${PORT}/api/test`);
+      console.log(`💾 Base de données: PostgreSQL (centralisée)`);
+      
+      // Créer les dossiers nécessaires
+      if (!fs.existsSync('uploads')) {
+        fs.mkdirSync('uploads');
+        console.log('📁 Dossier uploads créé');
+      }
+      
+      if (!fs.existsSync('public')) {
+        fs.mkdirSync('public');
+        console.log('📁 Dossier public créé');
+      }
+    });
+  } catch (error) {
+    console.error('❌ Erreur lors du démarrage du serveur:', error);
+    process.exit(1);
+  }
+}
+
 // Gestion propre de l'arrêt du serveur
 process.on('SIGINT', async () => {
   console.log('\n🛑 Arrêt du serveur...');
@@ -637,28 +681,6 @@ process.on('SIGINT', async () => {
   }
   process.exit(0);
 });
-
-// Démarrage du serveur
-async function startServer() {
-  try {
-    // Initialiser la base de données
-    await initializeDatabase();
-    
-    // Démarrer le serveur
-    app.listen(PORT, () => {
-      console.log(`🚀 Serveur API Dictionnaire Zarma (PostgreSQL) démarré sur le port ${PORT}`);
-      console.log(`🔗 API disponible sur: https://votre-app-render.onrender.com/api`);
-      console.log(`🔐 Authentification requise pour les routes d'administration`);
-      console.log(`💾 Base de données: PostgreSQL (Render)`);
-    });
-  } catch (error) {
-    console.error('❌ Erreur lors du démarrage du serveur:', error);
-    // Ne pas quitter le processus en production
-    if (process.env.NODE_ENV !== 'production') {
-      process.exit(1);
-    }
-  }
-}
 
 // Démarrer le serveur
 startServer();

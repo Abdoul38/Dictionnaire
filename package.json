@@ -1,45 +1,45 @@
 {
   "name": "dictionnaire-zarma-api",
-  "version": "1.0.0",
-  "description": "API et interface d'administration pour le dictionnaire Zarma-Français",
-  "main": "server.js",
+  "version": "2.0.0",
+  "description": "API centralisée pour le Dictionnaire Zarma avec PostgreSQL",
+  "main": "server-postgresql.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
+    "start": "node server-postgresql.js",
+    "dev": "nodemon server-postgresql.js",
+    "migrate": "node scripts/migrate-sqlite-to-postgres.js",
     "test": "jest",
-    "setup": "node setup.js"
+    "docker:build": "docker build -t zarma-api .",
+    "docker:run": "docker-compose up -d",
+    "docker:stop": "docker-compose down",
+    "backup": "node scripts/backup-database.js"
   },
-  "keywords": [
-    "zarma",
-    "dictionary",
-    "api",
-    "niger",
-    "langue"
-  ],
-  "author": "Abdou HAMADOU MOUMOUNI",
-  "license": "MIT",
   "dependencies": {
-    "bcrypt": "^6.0.0",
-    "compression": "^1.8.1",
+    "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
-    "express": "^4.21.2",
-    "express-rate-limit": "^8.1.0",
-    "express-validator": "^7.2.1",
-    "helmet": "^7.2.0",
+    "dotenv": "^16.6.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "express-validator": "^7.0.1",
+    "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
-    "nginx": "^1.1.0",
-    "sqlite3": "^5.1.7"
+    "pg": "^8.16.3"
   },
   "devDependencies": {
     "jest": "^29.7.0",
-    "nodemon": "^3.1.10"
+    "nodemon": "^3.0.2",
+    "supertest": "^6.3.3"
   },
+  "keywords": [
+    "zarma",
+    "dictionnaire",
+    "api",
+    "postgresql",
+    "express"
+  ],
+  "author": "Votre nom",
+  "license": "MIT",
   "engines": {
     "node": ">=16.0.0"
-  },
-  "directories": {
-    "doc": "docs",
-    "test": "tests"
   }
 }

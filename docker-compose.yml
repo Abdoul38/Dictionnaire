@@ -1,0 +1,74 @@
+# docker-compose.yml - Configuration pour base centralisée
+version: '3.8'
+
+services:
+  # Base de données PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dictionnaire_zarma
+      POSTGRES_USER: zarma_user
+      POSTGRES_PASSWORD: zarma_password_2024
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - zarma_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zarma_user -d dictionnaire_zarma"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Application Node.js
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://zarma_user:zarma_password_2024@postgres:5432/dictionnaire_zarma
+      JWT_SECRET: your-super-secret-jwt-key-change-this-in-production-2024
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - zarma_network
+    volumes:
+      - ./uploads:/app/uploads
+      - ./public:/app/public
+
+  # Interface d'administration (optionnelle)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@zarma.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - zarma_network
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+volumes:
+  postgres_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  zarma_network:
+    driver: bridge
