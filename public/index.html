@@ -56,19 +56,46 @@
             opacity: 0.8;
         }
 
-        .logout-btn {
+        .logout-btn, .btn {
             background: rgba(255, 255, 255, 0.2);
             border: 1px solid rgba(255, 255, 255, 0.3);
             color: white;
-            padding: 8px 16px;
+            padding: 12px 24px;
             border-radius: 8px;
             cursor: pointer;
             transition: all 0.3s ease;
-            font-size: 0.9rem;
+            font-size: 1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
-        .logout-btn:hover {
+        .logout-btn:hover, .btn:hover {
             background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #2d3748;
+            border: 1px solid #cbd5e0;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+            color: white;
+            border: none;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
 
         .tabs {
@@ -150,52 +177,6 @@
             min-height: 100px;
         }
 
-        .btn {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 10px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .btn-primary:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
-        }
-
-        .btn-secondary {
-            background: #e2e8f0;
-            color: #2d3748;
-        }
-
-        .btn-secondary:hover {
-            background: #cbd5e0;
-        }
-
-        .btn-danger {
-            background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
-            color: white;
-        }
-
-        .btn-danger:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(245, 101, 101, 0.3);
-        }
-
         .words-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
@@ -258,6 +239,11 @@
             margin-top: 15px;
         }
 
+        .word-actions .btn {
+            font-size: 0.8rem;
+            padding: 8px 16px;
+        }
+
         .search-bar {
             display: flex;
             gap: 15px;
@@ -265,19 +251,18 @@
             align-items: center;
         }
 
-        .search-input {
-            flex: 1;
+        .search-input, .filter-select {
             padding: 12px 16px;
             border: 2px solid #e2e8f0;
             border-radius: 10px;
             font-size: 1rem;
         }
 
+        .search-input {
+            flex: 1;
+        }
+
         .filter-select {
-            padding: 12px 16px;
-            border: 2px solid #e2e8f0;
-            border-radius: 10px;
-            font-size: 1rem;
             min-width: 150px;
         }
 
@@ -401,22 +386,22 @@
     <div class="container">
         <div class="header">
             <div class="header-left">
-                <h1>🛠️ Administration - Dictionnaire Zarma</h1>
+                <h1>Administration - Dictionnaire Zarma</h1>
                 <p>Interface de gestion des mots et données du dictionnaire</p>
             </div>
             <div class="header-right">
                 <div class="user-info" id="userInfo">
                     Connecté en tant que: <span id="currentUser">Chargement...</span>
                 </div>
-                <button class="logout-btn" onclick="logout()">Déconnexion</button>
+                <button class="logout-btn" id="logoutBtn">Déconnexion</button>
             </div>
         </div>
 
         <div class="tabs">
-            <button class="tab active" data-tab="add-word">➕ Ajouter un Mot</button>
-            <button class="tab" data-tab="manage-words">📚 Gérer les Mots</button>
-            <button class="tab" data-tab="stats">📊 Statistiques</button>
-            <button class="tab" data-tab="export">💾 Export/Import</button>
+            <button class="tab active" data-tab="add-word">Ajouter un Mot</button>
+            <button class="tab" data-tab="manage-words">Gérer les Mots</button>
+            <button class="tab" data-tab="stats">Statistiques</button>
+            <button class="tab" data-tab="export">Export/Import</button>
         </div>
 
         <!-- Onglet Ajouter un Mot -->
@@ -492,8 +477,8 @@
                 </div>
 
                 <div style="text-align: center; margin-top: 30px;">
-                    <button type="submit" class="btn btn-primary" id="submit-btn">💾 Enregistrer le Mot</button>
-                    <button type="button" class="btn btn-secondary" onclick="clearForm()">🗑️ Effacer</button>
+                    <button type="submit" class="btn btn-primary" id="submit-btn">Enregistrer le Mot</button>
+                    <button type="button" class="btn btn-secondary" id="clear-btn">Effacer</button>
                 </div>
             </form>
         </div>
@@ -503,11 +488,11 @@
             <h2>Gestion des mots existants</h2>
             
             <div class="search-bar">
-                <input type="text" class="search-input" id="search-words" placeholder="🔍 Rechercher un mot...">
+                <input type="text" class="search-input" id="search-words" placeholder="Rechercher un mot...">
                 <select class="filter-select" id="filter-category">
                     <option value="">Toutes catégories</option>
                 </select>
-                <button class="btn btn-secondary" onclick="loadWordsList()">🔄 Actualiser</button>
+                <button class="btn btn-secondary" id="refresh-btn">Actualiser</button>
             </div>
 
             <div id="words-loading" class="loading" style="display: none;">
@@ -527,7 +512,7 @@
                 Chargement des statistiques...
             </div>
 
-            <div id="stats-content" style="display: none;">
+            <div id="stats-content">
                 <div class="stats-grid">
                     <div class="stat-card">
                         <div class="stat-number" id="total-words">0</div>
@@ -559,131 +544,45 @@
             <h2>Export et Import des données</h2>
             
             <div class="export-section">
-                <h3>📤 Exporter les données</h3>
+                <h3>Exporter les données</h3>
                 <p>Téléchargez vos données dans différents formats</p>
                 <div class="export-options">
-                    <button class="btn btn-primary" onclick="exportData('json')">📄 JSON</button>
-                    <button class="btn btn-primary" onclick="exportData('csv')">📊 CSV</button>
+                    <button class="btn btn-primary" id="export-json">JSON</button>
+                    <button class="btn btn-primary" id="export-csv">CSV</button>
                 </div>
             </div>
 
             <div class="export-section">
-                <h3>📥 Importer des données</h3>
+                <h3>Importer des données</h3>
                 <p>Charger des mots depuis un fichier</p>
                 <input type="file" id="import-file" accept=".json,.csv" style="margin: 10px 0;">
                 <div class="export-options">
-                    <button class="btn btn-secondary" onclick="importData()">📁 Importer</button>
+                    <button class="btn btn-secondary" id="import-btn">Importer</button>
                 </div>
             </div>
         </div>
     </div>
 
-         <div id="notification" class="notification"></div>
-
-    <!-- Modal d'avertissement de déconnexion -->
-    <div id="logout-warning" class="modal">
-        <div class="modal-content">
-            <h3>Session sur le point d'expirer</h3>
-            <p>Vous serez déconnecté automatiquement dans <span id="countdown" class="countdown">60</span> secondes pour des raisons de sécurité.</p>
-            <div class="modal-buttons">
-                <button class="btn btn-primary" onclick="extendSession()">Rester connecté</button>
-                
-                <button class="logout-btn" onclick="logout()">Déconnexion</button>
-            </div>
-        </div>
-    </div>
+    <div id="notification" class="notification"></div>
 
     <script>
         // Variables globales
         let currentUser = null;
         let editingWordId = null;
         let allWords = [];
-        let allCategories = [];
         
-        // Variables pour la déconnexion automatique
-        let inactivityTimer;
-        let warningTimer;
-        const LOGOUT_TIME = 3 * 60 * 1000; // 3 minutes en millisecondes
-        const WARNING_TIME = 60 * 1000; // 1 minute avant déconnexion
-
-        // Vérification de l'authentification au chargement
-        window.addEventListener('load', function() {
+        // Configuration de l'API
+        const API_BASE = window.location.origin + '/api';
+        
+        // Initialisation au chargement de la page
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Initialisation de l\'interface d\'administration...');
             checkAuthentication();
+            setupEventListeners();
             setupTabNavigation();
-            setupActivityListeners(); // Initialiser les écouteurs d'activité
         });
 
-        // Initialiser les écouteurs d'activité pour détecter l'inactivité
-        function setupActivityListeners() {
-            // Événements qui indiquent une activité utilisateur
-            const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click', 'input'];
-            
-            events.forEach(event => {
-                document.addEventListener(event, resetInactivityTimer, true);
-            });
-            
-            // Démarrer le minuteur d'inactivité
-            resetInactivityTimer();
-        }
-
-        // Réinitialiser le minuteur d'inactivité
-        function resetInactivityTimer() {
-            // Effacer les minuteurs existants
-            clearTimeout(inactivityTimer);
-            clearTimeout(warningTimer);
-            document.getElementById('logout-warning').style.display = 'none';
-            
-            // Définir un nouveau minuteur pour afficher l'avertissement
-            warningTimer = setTimeout(showLogoutWarning, LOGOUT_TIME - WARNING_TIME);
-            
-            // Définir un nouveau minuteur pour la déconnexion automatique
-            inactivityTimer = setTimeout(logout, LOGOUT_TIME);
-        }
-
-        // Afficher l'avertissement de déconnexion
-        function showLogoutWarning() {
-            const modal = document.getElementById('logout-warning');
-            const countdownElement = document.getElementById('countdown');
-            
-            modal.style.display = 'flex';
-            
-            // Mettre à jour le compte à rebours
-            let secondsLeft = WARNING_TIME / 1000;
-            const countdownInterval = setInterval(() => {
-                secondsLeft--;
-                countdownElement.textContent = secondsLeft;
-                
-                if (secondsLeft <= 0) {
-                    clearInterval(countdownInterval);
-                }
-            }, 1000);
-        }
-
-        // Prolonger la session
-        function extendSession() {
-            document.getElementById('logout-warning').style.display = 'none';
-            resetInactivityTimer();
-            showNotification('Session prolongée');
-        }
-
-        // Configuration de la navigation par onglets
-        function setupTabNavigation() {
-            // Ajouter les écouteurs d'événements aux onglets
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.addEventListener('click', function() {
-                    const tabName = this.getAttribute('data-tab');
-                    showTab(tabName);
-                });
-            });
-
-            // Vérifier si on a un hash dans l'URL
-            const hash = window.location.hash.substring(1);
-            if (hash && document.getElementById(hash)) {
-                showTab(hash);
-            }
-        }
-
-        // Vérifier si l'utilisateur est connecté
+        // Vérifier l'authentification
         function checkAuthentication() {
             const token = localStorage.getItem('admin_token');
             const expirationTime = localStorage.getItem('token_expiration');
@@ -705,7 +604,7 @@
         // Vérifier le token avec le serveur
         async function verifyTokenWithServer(token) {
             try {
-                const response = await fetch('/api/auth/verify', {
+                const response = await fetch(`${API_BASE}/auth/verify`, {
                     headers: {
                         'Authorization': `Bearer ${token}`
                     }
@@ -719,23 +618,17 @@
                 if (result.success) {
                     currentUser = result.user;
                     updateUserInfo();
+                    loadInitialData();
                 } else {
                     throw new Error('Vérification échouée');
                 }
             } catch (error) {
                 console.error('Erreur de vérification:', error);
-                showNotification('Session expirée. Veuillez vous reconnecter.', 'error');
+                showNotification('Session expirée. Redirection...', 'error');
                 setTimeout(() => {
                     localStorage.clear();
                     window.location.href = 'login.html';
                 }, 2000);
-            }
-        }
-
-        // Mettre à jour les informations utilisateur
-        function updateUserInfo() {
-            if (currentUser) {
-                document.getElementById('currentUser').textContent = currentUser.username;
             }
         }
 
@@ -763,7 +656,7 @@
                 const response = await fetch(url, mergedOptions);
                 
                 if (response.status === 401) {
-                    showNotification('Session expirée. Redirection vers la connexion...', 'error');
+                    showNotification('Session expirée. Redirection...', 'error');
                     setTimeout(() => {
                         localStorage.clear();
                         window.location.href = 'login.html';
@@ -779,19 +672,40 @@
             }
         }
 
-        // Gestion des onglets - CORRIGÉ
+        // Configuration des écouteurs d'événements
+        function setupEventListeners() {
+            document.getElementById('logoutBtn').addEventListener('click', logout);
+            document.getElementById('word-form').addEventListener('submit', handleFormSubmit);
+            document.getElementById('clear-btn').addEventListener('click', clearForm);
+            document.getElementById('refresh-btn').addEventListener('click', loadWordsList);
+            document.getElementById('export-json').addEventListener('click', () => exportData('json'));
+            document.getElementById('export-csv').addEventListener('click', () => exportData('csv'));
+            document.getElementById('import-btn').addEventListener('click', importData);
+            document.getElementById('search-words').addEventListener('input', debounce(loadWordsList, 300));
+            document.getElementById('filter-category').addEventListener('change', loadWordsList);
+        }
+
+        // Configuration de la navigation par onglets
+        function setupTabNavigation() {
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    const tabName = this.getAttribute('data-tab');
+                    showTab(tabName);
+                });
+            });
+        }
+
+        // Afficher un onglet
         function showTab(tabName) {
-            console.log('Affichage de l\'onglet:', tabName);
-            
-            // Désactiver tous les onglets et contenus
             document.querySelectorAll('.tab-content').forEach(content => {
                 content.classList.remove('active');
             });
+            
             document.querySelectorAll('.tab').forEach(tab => {
                 tab.classList.remove('active');
             });
 
-            // Activer l'onglet et le contenu sélectionné
             const tabContent = document.getElementById(tabName);
             const tabButton = document.querySelector(`.tab[data-tab="${tabName}"]`);
             
@@ -799,22 +713,29 @@
                 tabContent.classList.add('active');
                 tabButton.classList.add('active');
                 
-                // Charger les données spécifiques à l'onglet
                 if (tabName === 'manage-words') {
                     loadWordsList();
                 } else if (tabName === 'stats') {
                     loadStats();
                 }
-                
-                // Mettre à jour l'URL hash
-                window.location.hash = tabName;
-            } else {
-                console.error('Onglet non trouvé:', tabName);
             }
         }
 
-        // Gestion du formulaire d'ajout/modification
-        document.getElementById('word-form').addEventListener('submit', async function(e) {
+        // Mettre à jour les informations utilisateur
+        function updateUserInfo() {
+            if (currentUser) {
+                document.getElementById('currentUser').textContent = currentUser.username;
+            }
+        }
+
+        // Charger les données initiales
+        function loadInitialData() {
+            loadWordsList();
+            loadStats();
+        }
+
+        // Gestion du formulaire
+        async function handleFormSubmit(e) {
             e.preventDefault();
             
             const formData = new FormData(e.target);
@@ -839,12 +760,12 @@
             try {
                 let response;
                 if (editingWordId) {
-                    response = await authenticatedRequest(`/api/words/${editingWordId}`, {
+                    response = await authenticatedRequest(`${API_BASE}/words/${editingWordId}`, {
                         method: 'PUT',
                         body: JSON.stringify(wordData)
                     });
                 } else {
-                    response = await authenticatedRequest('/api/words', {
+                    response = await authenticatedRequest(`${API_BASE}/words`, {
                         method: 'POST',
                         body: JSON.stringify(wordData)
                     });
@@ -864,22 +785,24 @@
                 showNotification('Erreur lors de l\'enregistrement du mot', 'error');
             } finally {
                 submitBtn.disabled = false;
-                submitBtn.textContent = '💾 Enregistrer le Mot';
+                submitBtn.textContent = 'Enregistrer le Mot';
             }
-        });
+        }
 
         // Charger la liste des mots
         async function loadWordsList() {
             const container = document.getElementById('words-container');
             const loading = document.getElementById('words-loading');
-            const searchTerm = document.getElementById('search-words').value.toLowerCase();
+            const searchTerm = document.getElementById('search-words').value;
             const categoryFilter = document.getElementById('filter-category').value;
 
-            loading.style.display = 'block';
+            if (loading) {
+                loading.style.display = 'block';
+            }
             container.innerHTML = '';
 
             try {
-                let url = '/api/words?';
+                let url = `${API_BASE}/words?`;
                 const params = new URLSearchParams();
                 
                 if (searchTerm) params.append('search', searchTerm);
@@ -891,7 +814,7 @@
                     const data = await response.json();
                     allWords = data.words;
                     displayWords(allWords);
-                    updateCategoryFilter(allWords);
+                    updateCategoryFilter();
                 } else {
                     showNotification('Erreur lors du chargement des mots', 'error');
                 }
@@ -899,7 +822,9 @@
                 console.error('Erreur:', error);
                 showNotification('Erreur de connexion', 'error');
             } finally {
-                loading.style.display = 'none';
+                if (loading) {
+                    loading.style.display = 'none';
+                }
             }
         }
 
@@ -925,19 +850,38 @@
                     </div>
                     ${word.pronunciation ? `<div style="margin-top: 10px;"><strong>Prononciation:</strong> [${word.pronunciation}]</div>` : ''}
                     <div class="word-actions">
-                        <button class="btn btn-secondary" onclick="editWord(${word.id})">✏️ Modifier</button>
-                        <button class="btn btn-danger" onclick="deleteWord(${word.id}, '${word.zarmaWord}')">🗑️ Supprimer</button>
+                        <button class="btn btn-secondary edit-word-btn" data-word-id="${word.id}">Modifier</button>
+                        <button class="btn btn-danger delete-word-btn" data-word-id="${word.id}" data-word-name="${word.zarmaWord}">Supprimer</button>
                     </div>
                 </div>
             `).join('');
+
+            setupWordButtons();
+        }
+
+        // Configuration des boutons de mots
+        function setupWordButtons() {
+            document.querySelectorAll('.edit-word-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const wordId = parseInt(this.getAttribute('data-word-id'));
+                    editWord(wordId);
+                });
+            });
+
+            document.querySelectorAll('.delete-word-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const wordId = parseInt(this.getAttribute('data-word-id'));
+                    const wordName = this.getAttribute('data-word-name');
+                    deleteWord(wordId, wordName);
+                });
+            });
         }
 
         // Mettre à jour le filtre de catégorie
-        function updateCategoryFilter(words) {
+        function updateCategoryFilter() {
             const filter = document.getElementById('filter-category');
-            const categories = [...new Set(words.map(w => w.category).filter(c => c))];
+            const categories = [...new Set(allWords.map(w => w.category).filter(c => c))];
             
-            // Garder l'option "Toutes catégories"
             const currentValue = filter.value;
             filter.innerHTML = '<option value="">Toutes catégories</option>';
             
@@ -951,11 +895,7 @@
             filter.value = currentValue;
         }
 
-        // Recherche en temps réel
-        document.getElementById('search-words').addEventListener('input', debounce(loadWordsList, 300));
-        document.getElementById('filter-category').addEventListener('change', loadWordsList);
-
-        // Fonction debounce pour éviter trop de requêtes
+        // Fonction debounce
         function debounce(func, wait) {
             let timeout;
             return function executedFunction(...args) {
@@ -973,41 +913,22 @@
             document.getElementById('word-form').reset();
             editingWordId = null;
             document.getElementById('form-title').textContent = 'Ajouter un nouveau mot';
+            showNotification('Formulaire effacé');
         }
 
         // Charger les statistiques
         async function loadStats() {
             const loading = document.getElementById('stats-loading');
-            const content = document.getElementById('stats-content');
             
-            loading.style.display = 'block';
-            content.style.display = 'none';
+            if (loading) {
+                loading.style.display = 'block';
+            }
 
             try {
-                const response = await fetch('/api/stats');
-                
+                const response = await fetch(`${API_BASE}/stats`);
                 if (response.ok) {
                     const stats = await response.json();
-                    
-                    document.getElementById('total-words').textContent = stats.totalWords || 0;
-                    document.getElementById('total-categories').textContent = stats.totalCategories || 0;
-                    document.getElementById('avg-difficulty').textContent = stats.avgDifficulty || 0;
-                    document.getElementById('completion-rate').textContent = (stats.completionRate || 0) + '%';
-
-                    // Statistiques par catégorie
-                    const categoryStats = document.getElementById('category-stats');
-                    if (stats.categoryDistribution && stats.categoryDistribution.length > 0) {
-                        categoryStats.innerHTML = stats.categoryDistribution.map(cat => `
-                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; margin: 5px 0; background: #f7fafc; border-radius: 8px;">
-                                <span style="font-weight: 600; text-transform: capitalize;">${cat.category}</span>
-                                <span style="background: #667eea; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.9rem;">${cat.count} mots</span>
-                            </div>
-                        `).join('');
-                    } else {
-                        categoryStats.innerHTML = '<p style="text-align: center; color: #718096;">Aucune donnée disponible</p>';
-                    }
-                    
-                    content.style.display = 'block';
+                    displayStats(stats);
                 } else {
                     showNotification('Erreur lors du chargement des statistiques', 'error');
                 }
@@ -1015,293 +936,184 @@
                 console.error('Erreur:', error);
                 showNotification('Erreur de connexion', 'error');
             } finally {
-                loading.style.display = 'none';
+                if (loading) {
+                    loading.style.display = 'none';
+                }
             }
         }
 
-       
-// Corrections à apporter dans le script de index.html
-
-// Remplacer la fonction loadStats existante par celle-ci :
-async function loadStats() {
-    const loading = document.getElementById('stats-loading');
-    const content = document.getElementById('stats-content');
-    
-    loading.style.display = 'block';
-    content.style.display = 'none';
-
-    try {
-        const response = await authenticatedRequest('/api/stats');
-        
-        if (response && response.ok) {
-            const stats = await response.json();
-            
+        // Afficher les statistiques
+        function displayStats(stats) {
             document.getElementById('total-words').textContent = stats.totalWords || 0;
             document.getElementById('total-categories').textContent = stats.totalCategories || 0;
             document.getElementById('avg-difficulty').textContent = stats.avgDifficulty || '0.0';
-            document.getElementById('completion-rate').textContent = (stats.completionRate || 0) + '%';
-
-            // Statistiques par catégorie
-            const categoryStats = document.getElementById('category-stats');
+            document.getElementById('completion-rate').textContent = `${stats.completionRate || 0}%`;
+            
+            // Afficher la répartition par catégories
             if (stats.categoryDistribution && stats.categoryDistribution.length > 0) {
-                categoryStats.innerHTML = stats.categoryDistribution.map(cat => `
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; margin: 5px 0; background: #f7fafc; border-radius: 8px;">
-                        <span style="font-weight: 600; text-transform: capitalize;">${cat.category || 'Non catégorisé'}</span>
-                        <span style="background: #667eea; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.9rem;">${cat.count} mots</span>
-                    </div>
-                `).join('');
-            } else {
-                categoryStats.innerHTML = '<p style="text-align: center; color: #718096;">Aucune donnée disponible</p>';
+                const categoryStats = document.getElementById('category-stats');
+                const totalWords = stats.totalWords;
+                
+                categoryStats.innerHTML = stats.categoryDistribution.map(cat => {
+                    const percentage = Math.round((cat.count / totalWords) * 100);
+                    return `
+                        <div style="margin: 10px 0;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                <span>${cat.category}</span>
+                                <span>${cat.count} mots (${percentage}%)</span>
+                            </div>
+                            <div style="height: 10px; background: #e2e8f0; border-radius: 5px;">
+                                <div style="height: 100%; width: ${percentage}%; background: #667eea; border-radius: 5px;"></div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
             }
-            
-            content.style.display = 'block';
-        } else {
-            showNotification('Erreur lors du chargement des statistiques', 'error');
-        }
-    } catch (error) {
-        console.error('Erreur:', error);
-        showNotification('Erreur de connexion', 'error');
-    } finally {
-        loading.style.display = 'none';
-    }
-}
-
-// Modifier la fonction editWord pour corriger l'affichage des données :
-async function editWord(id) {
-    try {
-        const response = await authenticatedRequest(`/api/words/${id}`);
-        
-        if (!response || !response.ok) {
-            throw new Error('Erreur lors du chargement du mot');
         }
 
-        const word = await response.json();
-        
-        editingWordId = id;
-        
-        // Remplir le formulaire avec les bonnes propriétés
-        document.getElementById('zarma-word').value = word.zarmaWord || '';
-        document.getElementById('french-meaning').value = word.frenchMeaning || '';
-        document.getElementById('zarma-example').value = word.zarmaExample || '';
-        document.getElementById('french-example').value = word.frenchExample || '';
-        document.getElementById('category').value = word.category || '';
-        document.getElementById('difficulty').value = word.difficultyLevel || 1;
-        document.getElementById('pronunciation').value = word.pronunciation || '';
-        document.getElementById('etymology').value = word.etymology || '';
-        
-        // Gérer les tableaux pour synonymes, antonymes, mots liés
-        document.getElementById('synonyms').value = Array.isArray(word.synonyms) ? word.synonyms.join(', ') : (word.synonyms || '');
-        document.getElementById('antonyms').value = Array.isArray(word.antonyms) ? word.antonyms.join(', ') : (word.antonyms || '');
-        document.getElementById('related-words').value = Array.isArray(word.relatedWords) ? word.relatedWords.join(', ') : (word.relatedWords || '');
-
-        // Changer le titre et le bouton
-        document.getElementById('form-title').textContent = 'Modifier le mot: ' + word.zarmaWord;
-        document.getElementById('submit-btn').textContent = '✏️ Modifier le Mot';
-        
-        // Aller à l'onglet d'ajout
-        showTab('add-word');
-        
-        showNotification('Mot chargé pour modification');
-        
-    } catch (error) {
-        console.error('Erreur:', error);
-        showNotification('Erreur lors du chargement du mot', 'error');
-    }
-}
-
-// Corriger la fonction de suppression :
-async function deleteWord(id, wordName) {
-    if (!confirm(`Êtes-vous sûr de vouloir supprimer le mot "${wordName}" ?\n\nCette action est irréversible.`)) {
-        return;
-    }
-
-    const confirmDelete = confirm('Confirmation finale : voulez-vous vraiment supprimer ce mot ?');
-    if (!confirmDelete) {
-        return;
-    }
-
-    try {
-        const response = await authenticatedRequest(`/api/words/${id}`, {
-            method: 'DELETE'
-        });
-
-        if (response && response.ok) {
-            showNotification('Mot supprimé avec succès!');
-            loadWordsList();
-            
-            // Si on était en train d'éditer ce mot, clear le form
-            if (editingWordId == id) {
-                clearForm();
-            }
-        } else if (response) {
-            const errorText = await response.text();
-            let errorMessage;
+        // Modifier un mot
+        async function editWord(id) {
             try {
-                const error = JSON.parse(errorText);
-                errorMessage = error.message || error.error || 'Erreur lors de la suppression';
-            } catch {
-                errorMessage = 'Erreur lors de la suppression';
-            }
-            showNotification(errorMessage, 'error');
-        } else {
-            showNotification('Erreur de connexion lors de la suppression', 'error');
-        }
-    } catch (error) {
-        console.error('Erreur:', error);
-        showNotification('Erreur lors de la suppression du mot', 'error');
-    }
-}
-
-// Corriger la fonction exportData :
-async function exportData(format) {
-    try {
-        showNotification('Préparation de l\'export...', 'success');
-        
-        const response = await authenticatedRequest(`/api/export?format=${format}`);
-        
-        if (response && response.ok) {
-            const blob = await response.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            
-            const timestamp = new Date().toISOString().split('T')[0];
-            a.href = url;
-            a.download = `dictionnaire_zarma_${timestamp}.${format}`;
-            a.style.display = 'none';
-            
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-
-            showNotification(`Export ${format.toUpperCase()} téléchargé avec succès!`);
-        } else {
-            const errorText = await response.text();
-            console.error('Erreur export:', errorText);
-            showNotification('Erreur lors de l\'export', 'error');
-        }
-    } catch (error) {
-        console.error('Erreur export:', error);
-        showNotification('Erreur lors de l\'export: ' + error.message, 'error');
-    }
-}
-
-// Corriger la fonction importData :
-async function importData() {
-    const fileInput = document.getElementById('import-file');
-    const file = fileInput.files[0];
-    
-    if (!file) {
-        showNotification('Veuillez sélectionner un fichier à importer.', 'error');
-        return;
-    }
-
-    // Vérifier le format du fichier
-    const fileExtension = file.name.split('.').pop().toLowerCase();
-    if (!['json', 'csv'].includes(fileExtension)) {
-        showNotification('Format de fichier non supporté. Utilisez JSON ou CSV.', 'error');
-        return;
-    }
-
-    if (!confirm(`Êtes-vous sûr de vouloir importer des données depuis ${file.name} ?\n\nCela peut ajouter de nouveaux mots au dictionnaire.`)) {
-        return;
-    }
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-        showNotification('Import en cours...', 'success');
-        
-        const token = localStorage.getItem('admin_token');
-        const response = await fetch('/api/import', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            },
-            body: formData
-        });
-
-        if (response && response.ok) {
-            const result = await response.json();
-            showNotification(result.message || 'Import réussi');
-            fileInput.value = '';
-            
-            // Recharger la liste des mots si on est sur cet onglet
-            if (document.getElementById('manage-words').classList.contains('active')) {
-                loadWordsList();
-            }
-        } else if (response) {
-            const errorText = await response.text();
-            let errorMessage;
-            try {
-                const error = JSON.parse(errorText);
-                errorMessage = error.error || error.message || 'Erreur lors de l\'import';
-            } catch {
-                errorMessage = 'Erreur lors de l\'import';
-            }
-            showNotification(errorMessage, 'error');
-        } else {
-            showNotification('Erreur de connexion lors de l\'import', 'error');
-        }
-    } catch (error) {
-        console.error('Erreur import:', error);
-        showNotification('Erreur lors de l\'import: ' + error.message, 'error');
-    }
-}
-
-// Améliorer la fonction clearForm :
-function clearForm() {
-    document.getElementById('word-form').reset();
-    editingWordId = null;
-    document.getElementById('form-title').textContent = 'Ajouter un nouveau mot';
-    document.getElementById('submit-btn').textContent = '💾 Enregistrer le Mot';
-    
-    // Remettre les valeurs par défaut
-    document.getElementById('difficulty').value = '1';
-}
-
-// Corriger la fonction logout :
-async function logout() {
-    // Effacer les minuteurs
-    clearTimeout(inactivityTimer);
-    clearTimeout(warningTimer);
-    const logoutWarning = document.getElementById('logout-warning');
-    if (logoutWarning) {
-        logoutWarning.style.display = 'none';
-    }
-    
-    const token = localStorage.getItem('admin_token');
-    
-    // Appeler l'API de déconnexion si on a un token
-    if (token) {
-        try {
-            await fetch('/api/auth/logout', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
+                const response = await fetch(`${API_BASE}/words/${id}`);
+                if (response.ok) {
+                    const word = await response.json();
+                    
+                    // Remplir le formulaire
+                    document.getElementById('zarma-word').value = word.zarmaWord || '';
+                    document.getElementById('french-meaning').value = word.frenchMeaning || '';
+                    document.getElementById('zarma-example').value = word.zarmaExample || '';
+                    document.getElementById('french-example').value = word.frenchExample || '';
+                    document.getElementById('category').value = word.category || '';
+                    document.getElementById('difficulty').value = word.difficultyLevel || '1';
+                    document.getElementById('pronunciation').value = word.pronunciation || '';
+                    document.getElementById('etymology').value = word.etymology || '';
+                    document.getElementById('synonyms').value = word.synonyms ? word.synonyms.join(', ') : '';
+                    document.getElementById('antonyms').value = word.antonyms ? word.antonyms.join(', ') : '';
+                    document.getElementById('related-words').value = word.relatedWords ? word.relatedWords.join(', ') : '';
+                    
+                    editingWordId = id;
+                    document.getElementById('form-title').textContent = `Modifier le mot "${word.zarmaWord}"`;
+                    
+                    showTab('add-word');
+                    showNotification('Mot chargé pour modification');
+                    
+                    window.scrollTo(0, 0);
+                } else {
+                    showNotification('Erreur lors du chargement du mot', 'error');
                 }
-            });
-        } catch (error) {
-            console.error('Erreur lors de la déconnexion API:', error);
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('Erreur de connexion', 'error');
+            }
         }
-    }
 
-    // Nettoyer le stockage local
-    localStorage.removeItem('admin_token');
-    localStorage.removeItem('token_expiration');
-    localStorage.removeItem('admin_user');
-    localStorage.removeItem('last_login');
-    
-    showNotification('Déconnexion réussie');
-    
-    // Rediriger vers la page de connexion
-    setTimeout(() => {
-        window.location.href = 'logout.html';
-    }, 1000);
-}
-        // Déconnexion - FONCTION AJOUTÉ
+        // Supprimer un mot
+        async function deleteWord(id, wordName) {
+            if (!confirm(`Êtes-vous sûr de vouloir supprimer le mot "${wordName}" ? Cette action est irréversible.`)) {
+                return;
+            }
+
+            try {
+                const response = await authenticatedRequest(`${API_BASE}/words/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (response && response.ok) {
+                    showNotification('Mot supprimé avec succès!');
+                    loadWordsList();
+                } else if (response) {
+                    const error = await response.json();
+                    showNotification(error.message || 'Erreur lors de la suppression', 'error');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('Erreur lors de la suppression', 'error');
+            }
+        }
+
+        // Exporter les données
+        async function exportData(format) {
+            try {
+                showNotification('Génération de l\'export...');
+                const response = await fetch(`${API_BASE}/export?format=${format}`);
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = `dictionnaire-zarma.${format}`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    showNotification(`Export ${format.toUpperCase()} réussi!`);
+                } else {
+                    showNotification('Erreur lors de l\'export', 'error');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('Erreur lors de l\'export', 'error');
+            }
+        }
+
+        // Importer des données
+        async function importData() {
+            const fileInput = document.getElementById('import-file');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showNotification('Veuillez sélectionner un fichier', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                showNotification('Import en cours...');
+                const response = await authenticatedRequest(`${API_BASE}/import`, {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        // Ne pas définir Content-Type pour FormData
+                        'Authorization': `Bearer ${localStorage.getItem('admin_token')}`
+                    }
+                });
+
+                if (response && response.ok) {
+                    const result = await response.json();
+                    showNotification(`${result.imported} mots importés avec succès!`);
+                    fileInput.value = '';
+                    loadWordsList();
+                } else if (response) {
+                    const error = await response.json();
+                    showNotification(error.error || 'Erreur lors de l\'import', 'error');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('Erreur lors de l\'import', 'error');
+            }
+        }
+
+        // Déconnexion
+        async function logout() {
+            if (!confirm('Êtes-vous sûr de vouloir vous déconnecter ?')) {
+                return;
+            }
+
+            try {
+                await authenticatedRequest(`${API_BASE}/auth/logout`, {
+                    method: 'POST'
+                });
+            } catch (error) {
+                console.error('Erreur lors de la déconnexion:', error);
+            }
+
+            localStorage.clear();
+            window.location.href = 'login.html';
+        }
 
         // Afficher une notification
         function showNotification(message, type = 'success') {
@@ -1309,55 +1121,11 @@ async function logout() {
             notification.textContent = message;
             notification.className = `notification ${type}`;
             notification.classList.add('show');
-
+            
             setTimeout(() => {
                 notification.classList.remove('show');
-            }, 4000);
+            }, 3000);
         }
-
-        // Raccourcis clavier
-        document.addEventListener('keydown', function(e) {
-            if (e.ctrlKey || e.metaKey) {
-                switch(e.key) {
-                    case 's':
-                        e.preventDefault();
-                        document.getElementById('word-form').dispatchEvent(new Event('submit'));
-                        break;
-                    case 'n':
-                        e.preventDefault();
-                        clearForm();
-                        showTab('add-word');
-                        break;
-                    case 'f':
-                        e.preventDefault();
-                        document.getElementById('search-words').focus();
-                        break;
-                }
-            }
-            
-            // Réinitialiser le minuteur d'inactivité à chaque frappe
-            resetInactivityTimer();
-        });
-
-        // Vérification périodique de la session
-        setInterval(() => {
-            const expirationTime = localStorage.getItem('token_expiration');
-            if (expirationTime && Date.now() >= parseInt(expirationTime)) {
-                showNotification('Votre session a expiré', 'error');
-                setTimeout(() => {
-                    logout();
-                }, 2000);
-            }
-        }, 30000); // Vérifier toutes les 30 secondes
-
-        // Support pour la navigation via URL hash
-        window.addEventListener('hashchange', function() {
-            const hash = window.location.hash.substring(1);
-            if (hash && document.getElementById(hash)) {
-                showTab(hash);
-            }
-        });
-
     </script>
 </body>
 </html>
