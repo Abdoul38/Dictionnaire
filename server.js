@@ -894,8 +894,7 @@ app.post('/api/import', authenticateToken, upload.single('file'), async (req, re
     });
   }
 });
-  }
-});
+
 
 // POST /api/sync - Point de synchronisation pour l'application mobile
 app.post('/api/sync', async (req, res) => {
