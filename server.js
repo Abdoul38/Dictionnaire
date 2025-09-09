@@ -611,6 +611,9 @@ app.get('/api/stats', async (req, res) => {
 });
 
 // GET /api/export - Export des données
+// Corrections pour les fonctions d'export et d'import dans server.js
+
+// GET /api/export - Export des données (CORRIGÉ)
 app.get('/api/export', async (req, res) => {
   const { format } = req.query;
   
@@ -641,16 +644,36 @@ app.get('/api/export', async (req, res) => {
     }));
 
     if (format === 'csv') {
-      // Export CSV
-      let csv = 'Mot Zarma,Signification Française,Exemple Zarma,Exemple Français,Catégorie,Prononciation,Niveau,Étymologie,Synonymes,Antonymes,Mots Liés\n';
+      // Export CSV avec encodage UTF-8
+      let csv = '\uFEFF'; // BOM UTF-8
+      csv += 'Mot Zarma,Signification Française,Exemple Zarma,Exemple Français,Catégorie,Prononciation,Niveau,Étymologie,Synonymes,Antonymes,Mots Liés\n';
       
       words.forEach(word => {
         const escapeCsvField = (field) => {
           if (!field) return '';
-          return String(field).replace(/"/g, '""');
+          const str = String(field).replace(/"/g, '""');
+          // Entourer de guillemets si contient virgule, guillemet ou saut de ligne
+          if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+            return `"${str}"`;
+          }
+          return str;
         };
         
-        csv += `"${escapeCsvField(word.zarmaWord)}","${escapeCsvField(word.frenchMeaning)}","${escapeCsvField(word.zarmaExample)}","${escapeCsvField(word.frenchExample)}","${escapeCsvField(word.category)}","${escapeCsvField(word.pronunciation)}","${word.difficultyLevel || 1}","${escapeCsvField(word.etymology)}","${escapeCsvField(word.synonyms)}","${escapeCsvField(word.antonyms)}","${escapeCsvField(word.relatedWords)}"\n`;
+        const row = [
+          escapeCsvField(word.zarmaWord),
+          escapeCsvField(word.frenchMeaning),
+          escapeCsvField(word.zarmaExample),
+          escapeCsvField(word.frenchExample),
+          escapeCsvField(word.category),
+          escapeCsvField(word.pronunciation),
+          word.difficultyLevel || 1,
+          escapeCsvField(word.etymology),
+          escapeCsvField(word.synonyms),
+          escapeCsvField(word.antonyms),
+          escapeCsvField(word.relatedWords)
+        ].join(',');
+        
+        csv += row + '\n';
       });
 
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -658,21 +681,24 @@ app.get('/api/export', async (req, res) => {
       res.send(csv);
     } else {
       // Export JSON (par défaut)
-      res.setHeader('Content-Type', 'application/json');
-      res.setHeader('Content-Disposition', 'attachment; filename="dictionnaire_zarma.json"');
-      res.json({
+      const exportData = {
         exportDate: new Date().toISOString(),
         totalWords: words.length,
+        version: '1.0',
         words: words
-      });
+      };
+      
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="dictionnaire_zarma.json"');
+      res.json(exportData);
     }
   } catch (error) {
     console.error('Erreur lors de l\'export:', error);
-    res.status(500).json({ error: 'Erreur lors de l\'export des données' });
+    res.status(500).json({ error: 'Erreur lors de l\'export des données: ' + error.message });
   }
 });
 
-// POST /api/import - Import des données
+// POST /api/import - Import des données (CORRIGÉ)
 app.post('/api/import', authenticateToken, upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'Aucun fichier fourni' });
@@ -694,99 +720,212 @@ app.post('/api/import', authenticateToken, upload.single('file'), async (req, re
       } else if (Array.isArray(data)) {
         wordsToImport = data;
       } else {
-        throw new Error('Format JSON invalide');
+        throw new Error('Format JSON invalide. Le fichier doit contenir un tableau de mots.');
       }
     } else if (fileExtension === '.csv') {
-      // Import CSV
+      // Import CSV amélioré
       const fileContent = fs.readFileSync(filePath, 'utf8');
-      const lines = fileContent.split('\n');
-      const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+      const lines = fileContent.replace(/^\uFEFF/, '').split('\n'); // Retirer BOM UTF-8
+      
+      if (lines.length < 2) {
+        throw new Error('Le fichier CSV doit contenir au moins une ligne d\'en-tête et une ligne de données');
+      }
+      
+      // Parser CSV manuel pour gérer les champs entre guillemets
+      const parseCsvLine = (line) => {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          
+          if (char === '"') {
+            if (inQuotes && line[i + 1] === '"') {
+              // Double quote = quote échappée
+              current += '"';
+              i++; // Skip next quote
+            } else {
+              // Toggle quote mode
+              inQuotes = !inQuotes;
+            }
+          } else if (char === ',' && !inQuotes) {
+            // End of field
+            result.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        
+        // Add last field
+        result.push(current.trim());
+        return result;
+      };
+      
+      const headers = parseCsvLine(lines[0]);
+      console.log('En-têtes CSV détectés:', headers);
       
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (line) {
-          const values = line.split(',').map(v => v.replace(/"/g, '').trim());
-          if (values.length >= 4) {
-            wordsToImport.push({
-              zarmaWord: values[0],
-              frenchMeaning: values[1],
-              zarmaExample: values[2],
-              frenchExample: values[3],
+          const values = parseCsvLine(line);
+          
+          if (values.length >= 4 && values[0] && values[1] && values[2] && values[3]) {
+            const word = {
+              zarmaWord: values[0] || '',
+              frenchMeaning: values[1] || '',
+              zarmaExample: values[2] || '',
+              frenchExample: values[3] || '',
               category: values[4] || null,
               pronunciation: values[5] || null,
               difficultyLevel: parseInt(values[6]) || 1,
               etymology: values[7] || null,
-              synonyms: values[8] ? values[8].split(';') : [],
-              antonyms: values[9] ? values[9].split(';') : [],
-              relatedWords: values[10] ? values[10].split(';') : []
-            });
+              synonyms: values[8] ? values[8].split(';').map(s => s.trim()).filter(s => s) : [],
+              antonyms: values[9] ? values[9].split(';').map(s => s.trim()).filter(s => s) : [],
+              relatedWords: values[10] ? values[10].split(';').map(s => s.trim()).filter(s => s) : []
+            };
+            
+            wordsToImport.push(word);
           }
         }
       }
     } else {
-      throw new Error('Format de fichier non supporté');
+      throw new Error('Format de fichier non supporté. Utilisez .json ou .csv');
     }
 
+    console.log(`Tentative d'import de ${wordsToImport.length} mots`);
+
     let importedCount = 0;
+    let updatedCount = 0;
     let errorCount = 0;
+    const errors = [];
 
-    // Import des mots
-    for (const word of wordsToImport) {
-      try {
-        if (!word.zarmaWord || !word.frenchMeaning || !word.zarmaExample || !word.frenchExample) {
-          errorCount++;
-          continue;
-        }
-
-        // Vérifier si le mot existe déjà 
-        const existingWord = await pool.query('SELECT id FROM words WHERE zarma_word = $1', [word.zarmaWord]);
+    // Import des mots avec transaction
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      for (let i = 0; i < wordsToImport.length; i++) {
+        const word = wordsToImport[i];
         
-        if (existingWord.rows.length === 0) {
-          await pool.query(`
-            INSERT INTO words (
-              zarma_word, zarma_example, french_meaning, french_example,
-              category, pronunciation, difficulty_level, etymology,
-              synonyms, antonyms, related_words
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-          `, [
-            word.zarmaWord,
-            word.zarmaExample,
-            word.frenchMeaning,
-            word.frenchExample,
-            word.category,
-            word.pronunciation,
-            word.difficultyLevel || 1,
-            word.etymology,
-            joinCommaSeparated(word.synonyms),
-            joinCommaSeparated(word.antonyms),
-            joinCommaSeparated(word.relatedWords)
-          ]);
-          importedCount++;
+        try {
+          // Validation des champs requis
+          if (!word.zarmaWord || !word.frenchMeaning || !word.zarmaExample || !word.frenchExample) {
+            errors.push(`Ligne ${i + 1}: Champs requis manquants`);
+            errorCount++;
+            continue;
+          }
+
+          // Vérifier si le mot existe déjà
+          const existingWord = await client.query('SELECT id FROM words WHERE zarma_word = $1', [word.zarmaWord]);
+          
+          if (existingWord.rows.length === 0) {
+            // Créer nouveau mot
+            const result = await client.query(`
+              INSERT INTO words (
+                zarma_word, zarma_example, french_meaning, french_example,
+                category, pronunciation, difficulty_level, etymology,
+                synonyms, antonyms, related_words
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+              RETURNING id
+            `, [
+              word.zarmaWord,
+              word.zarmaExample,
+              word.frenchMeaning,
+              word.frenchExample,
+              word.category,
+              word.pronunciation,
+              word.difficultyLevel || 1,
+              word.etymology,
+              joinCommaSeparated(word.synonyms),
+              joinCommaSeparated(word.antonyms),
+              joinCommaSeparated(word.relatedWords)
+            ]);
+            
+            // Initialiser les progrès d'apprentissage
+            await client.query('INSERT INTO learning_progress (word_id) VALUES ($1)', [result.rows[0].id]);
+            
+            importedCount++;
+          } else {
+            // Mettre à jour mot existant
+            await client.query(`
+              UPDATE words SET
+                zarma_example = $2,
+                french_meaning = $3,
+                french_example = $4,
+                category = $5,
+                pronunciation = $6,
+                difficulty_level = $7,
+                etymology = $8,
+                synonyms = $9,
+                antonyms = $10,
+                related_words = $11,
+                updated_at = EXTRACT(EPOCH FROM NOW())
+              WHERE zarma_word = $1
+            `, [
+              word.zarmaWord,
+              word.zarmaExample,
+              word.frenchMeaning,
+              word.frenchExample,
+              word.category,
+              word.pronunciation,
+              word.difficultyLevel || 1,
+              word.etymology,
+              joinCommaSeparated(word.synonyms),
+              joinCommaSeparated(word.antonyms),
+              joinCommaSeparated(word.relatedWords)
+            ]);
+            
+            updatedCount++;
+          }
+        } catch (wordError) {
+          console.error(`Erreur lors de l'import du mot "${word.zarmaWord}":`, wordError);
+          errors.push(`Mot "${word.zarmaWord}": ${wordError.message}`);
+          errorCount++;
         }
-      } catch (error) {
-        console.error('Erreur lors de l\'import d\'un mot:', error);
-        errorCount++;
       }
+      
+      await client.query('COMMIT');
+      console.log(`Import terminé: ${importedCount} créés, ${updatedCount} mis à jour, ${errorCount} erreurs`);
+      
+    } catch (transactionError) {
+      await client.query('ROLLBACK');
+      throw transactionError;
+    } finally {
+      client.release();
     }
 
     // Nettoyer le fichier temporaire
-    fs.unlinkSync(filePath);
+    try {
+      fs.unlinkSync(filePath);
+    } catch (cleanupError) {
+      console.error('Erreur lors du nettoyage du fichier:', cleanupError);
+    }
 
     res.json({
       success: true,
-      message: `Import terminé: ${importedCount} mots importés, ${errorCount} erreurs`,
+      message: `Import terminé: ${importedCount} mots créés, ${updatedCount} mots mis à jour, ${errorCount} erreurs`,
       imported: importedCount,
-      errors: errorCount
+      updated: updatedCount,
+      errors: errorCount,
+      errorDetails: errors.length > 0 ? errors.slice(0, 10) : [] // Limiter à 10 erreurs pour la réponse
     });
+    
   } catch (error) {
     console.error('Erreur lors de l\'import:', error);
+    
     // Nettoyer le fichier temporaire en cas d'erreur
     try {
       fs.unlinkSync(filePath);
     } catch (cleanupError) {
       console.error('Erreur lors du nettoyage du fichier:', cleanupError);
     }
-    res.status(500).json({ error: 'Erreur lors de l\'import: ' + error.message });
+    
+    res.status(500).json({ 
+      error: 'Erreur lors de l\'import: ' + error.message,
+      success: false
+    });
   }
 });
 
