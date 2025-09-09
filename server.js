@@ -699,6 +699,7 @@ app.get('/api/export', async (req, res) => {
 });
 
 // POST /api/import - Import des données (CORRIGÉ)
+// POST /api/import - Import des données (MODIFIÉ pour accepter les doublons)
 app.post('/api/import', authenticateToken, upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'Aucun fichier fourni' });
@@ -794,14 +795,13 @@ app.post('/api/import', authenticateToken, upload.single('file'), async (req, re
       throw new Error('Format de fichier non supporté. Utilisez .json ou .csv');
     }
 
-    console.log(`Tentative d'import de ${wordsToImport.length} mots`);
+    console.log(`Tentative d'import de ${wordsToImport.length} mots (avec doublons autorisés)`);
 
     let importedCount = 0;
-    let updatedCount = 0;
     let errorCount = 0;
     const errors = [];
 
-    // Import des mots avec transaction
+    // Import des mots avec transaction - TOUJOURS CRÉER DE NOUVEAUX ENREGISTREMENTS
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -812,82 +812,47 @@ app.post('/api/import', authenticateToken, upload.single('file'), async (req, re
         try {
           // Validation des champs requis
           if (!word.zarmaWord || !word.frenchMeaning || !word.zarmaExample || !word.frenchExample) {
-            errors.push(`Ligne ${i + 1}: Champs requis manquants`);
+            errors.push(`Ligne ${i + 1}: Champs requis manquants (zarmaWord, frenchMeaning, zarmaExample, frenchExample)`);
             errorCount++;
             continue;
           }
 
-          // Vérifier si le mot existe déjà
-          const existingWord = await client.query('SELECT id FROM words WHERE zarma_word = $1', [word.zarmaWord]);
+          // TOUJOURS créer un nouveau mot (pas de vérification d'existence)
+          const result = await client.query(`
+            INSERT INTO words (
+              zarma_word, zarma_example, french_meaning, french_example,
+              category, pronunciation, difficulty_level, etymology,
+              synonyms, antonyms, related_words
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            RETURNING id
+          `, [
+            word.zarmaWord,
+            word.zarmaExample,
+            word.frenchMeaning,
+            word.frenchExample,
+            word.category,
+            word.pronunciation,
+            word.difficultyLevel || 1,
+            word.etymology,
+            joinCommaSeparated(word.synonyms),
+            joinCommaSeparated(word.antonyms),
+            joinCommaSeparated(word.relatedWords)
+          ]);
           
-          if (existingWord.rows.length === 0) {
-            // Créer nouveau mot
-            const result = await client.query(`
-              INSERT INTO words (
-                zarma_word, zarma_example, french_meaning, french_example,
-                category, pronunciation, difficulty_level, etymology,
-                synonyms, antonyms, related_words
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-              RETURNING id
-            `, [
-              word.zarmaWord,
-              word.zarmaExample,
-              word.frenchMeaning,
-              word.frenchExample,
-              word.category,
-              word.pronunciation,
-              word.difficultyLevel || 1,
-              word.etymology,
-              joinCommaSeparated(word.synonyms),
-              joinCommaSeparated(word.antonyms),
-              joinCommaSeparated(word.relatedWords)
-            ]);
-            
-            // Initialiser les progrès d'apprentissage
-            await client.query('INSERT INTO learning_progress (word_id) VALUES ($1)', [result.rows[0].id]);
-            
-            importedCount++;
-          } else {
-            // Mettre à jour mot existant
-            await client.query(`
-              UPDATE words SET
-                zarma_example = $2,
-                french_meaning = $3,
-                french_example = $4,
-                category = $5,
-                pronunciation = $6,
-                difficulty_level = $7,
-                etymology = $8,
-                synonyms = $9,
-                antonyms = $10,
-                related_words = $11,
-                updated_at = EXTRACT(EPOCH FROM NOW())
-              WHERE zarma_word = $1
-            `, [
-              word.zarmaWord,
-              word.zarmaExample,
-              word.frenchMeaning,
-              word.frenchExample,
-              word.category,
-              word.pronunciation,
-              word.difficultyLevel || 1,
-              word.etymology,
-              joinCommaSeparated(word.synonyms),
-              joinCommaSeparated(word.antonyms),
-              joinCommaSeparated(word.relatedWords)
-            ]);
-            
-            updatedCount++;
-          }
+          // Initialiser les progrès d'apprentissage pour le nouveau mot
+          await client.query('INSERT INTO learning_progress (word_id) VALUES ($1)', [result.rows[0].id]);
+          
+          importedCount++;
+          
         } catch (wordError) {
           console.error(`Erreur lors de l'import du mot "${word.zarmaWord}":`, wordError);
-          errors.push(`Mot "${word.zarmaWord}": ${wordError.message}`);
+          errors.push(`Mot "${word.zarmaWord}" (ligne ${i + 1}): ${wordError.message}`);
           errorCount++;
         }
       }
       
       await client.query('COMMIT');
-      console.log(`Import terminé: ${importedCount} créés, ${updatedCount} mis à jour, ${errorCount} erreurs`);
+      console.log(`Import terminé: ${importedCount} mots créés, ${errorCount} erreurs`);
       
     } catch (transactionError) {
       await client.query('ROLLBACK');
@@ -905,11 +870,12 @@ app.post('/api/import', authenticateToken, upload.single('file'), async (req, re
 
     res.json({
       success: true,
-      message: `Import terminé: ${importedCount} mots créés, ${updatedCount} mots mis à jour, ${errorCount} erreurs`,
+      message: `Import terminé: ${importedCount} mots créés (doublons autorisés), ${errorCount} erreurs`,
       imported: importedCount,
-      updated: updatedCount,
+      updated: 0, // Plus de mise à jour, seulement des créations
       errors: errorCount,
-      errorDetails: errors.length > 0 ? errors.slice(0, 10) : [] // Limiter à 10 erreurs pour la réponse
+      errorDetails: errors.length > 0 ? errors.slice(0, 10) : [], // Limiter à 10 erreurs pour la réponse
+      duplicatesAllowed: true
     });
     
   } catch (error) {
@@ -926,6 +892,8 @@ app.post('/api/import', authenticateToken, upload.single('file'), async (req, re
       error: 'Erreur lors de l\'import: ' + error.message,
       success: false
     });
+  }
+});
   }
 });
 
