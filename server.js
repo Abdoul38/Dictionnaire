@@ -207,12 +207,7 @@ async function startServer() {
   }
 }
 // Configuration de la base de données PostgreSQL pour Render
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? {
-    rejectUnauthorized: false
-  } : false
-});
+
 
 // Configuration sécurisée
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production';
