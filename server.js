@@ -895,6 +895,28 @@ app.post('/api/import', authenticateToken, upload.single('file'), async (req, re
   }
 });
 
+// Dans votre server.js ou app.js
+app.get('/health', async (req, res) => {
+  try {
+    // Vérifier la connexion à la base de données
+    const db = require('./db');
+    const dbHealthy = await db.healthCheck();
+    
+    res.status(200).json({
+      status: 'OK',
+      timestamp: new Date().toISOString(),
+      database: dbHealthy ? 'connected' : 'disconnected',
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'ERROR',
+      timestamp: new Date().toISOString(),
+      error: error.message
+    });
+  }
+});
 
 // POST /api/sync - Point de synchronisation pour l'application mobile
 app.post('/api/sync', async (req, res) => {
