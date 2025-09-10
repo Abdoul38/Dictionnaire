@@ -14,7 +14,198 @@ const { body, validationResult } = require('express-validator');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+// ========================================
+// server-updated.js - Corrections principales
+// ========================================
 
+// Remplacer les imports en haut du fichier server.js
+const { pool, testConnection, healthCheck, handleDatabaseError, queryWithRetry } = require('./db-config');
+
+// Middleware de gestion d'erreurs (à ajouter après les routes)
+app.use(handleDatabaseError);
+
+// Fonction de surveillance de la connexion
+async function startConnectionMonitoring() {
+  console.log('🔍 Démarrage de la surveillance de la connexion PostgreSQL...');
+  
+  const monitorInterval = setInterval(async () => {
+    const health = await healthCheck();
+    
+    if (!health.healthy) {
+      console.error('⚠️ Base de données non disponible:', health.error);
+      console.log('🔄 Tentative de reconnexion...');
+      await testConnection();
+    } else {
+      console.log(`💚 DB OK - Connexions: ${health.totalConnections}, Inactives: ${health.idleConnections}, En attente: ${health.waitingCount}`);
+    }
+  }, 60000); // Vérification toutes les minutes
+  
+  // Nettoyer l'intervalle à l'arrêt
+  process.on('SIGTERM', () => clearInterval(monitorInterval));
+  process.on('SIGINT', () => clearInterval(monitorInterval));
+}
+
+// Route de santé améliorée
+app.get('/health', async (req, res) => {
+  try {
+    const dbHealth = await healthCheck();
+    
+    res.status(dbHealth.healthy ? 200 : 503).json({
+      status: dbHealth.healthy ? 'OK' : 'ERROR',
+      timestamp: new Date().toISOString(),
+      database: dbHealth,
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      environment: process.env.NODE_ENV || 'development'
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'ERROR',
+      timestamp: new Date().toISOString(),
+      error: error.message
+    });
+  }
+});
+
+// Exemple de route corrigée avec gestion d'erreurs
+app.get('/api/words', async (req, res) => {
+  const { search, category, difficulty, limit, offset } = req.query;
+  
+  let query = `
+    SELECT w.*, 
+           COALESCE(lp.view_count, 0) as view_count, 
+           COALESCE(lp.practice_count, 0) as practice_count, 
+           COALESCE(lp.is_learned, false) as is_learned,
+           (SELECT COUNT(*) FROM favorites f WHERE f.word_id = w.id) > 0 as is_favorite
+    FROM words w 
+    LEFT JOIN learning_progress lp ON w.id = lp.word_id
+    WHERE 1=1
+  `;
+  
+  const params = [];
+  let paramCount = 0;
+  
+  if (search) {
+    paramCount++;
+    query += ` AND (w.zarma_word ILIKE $${paramCount} OR w.french_meaning ILIKE $${paramCount} OR w.zarma_example ILIKE $${paramCount} OR w.french_example ILIKE $${paramCount})`;
+    params.push(`%${search}%`);
+  }
+  
+  if (category) {
+    paramCount++;
+    query += ` AND w.category = $${paramCount}`;
+    params.push(category);
+  }
+  
+  if (difficulty) {
+    paramCount++;
+    query += ` AND w.difficulty_level = $${paramCount}`;
+    params.push(difficulty);
+  }
+  
+  query += ` ORDER BY w.usage_frequency DESC, w.zarma_word ASC`;
+  
+  if (limit) {
+    paramCount++;
+    query += ` LIMIT $${paramCount}`;
+    params.push(parseInt(limit));
+    
+    if (offset) {
+      paramCount++;
+      query += ` OFFSET $${paramCount}`;
+      params.push(parseInt(offset));
+    }
+  }
+  
+  try {
+    // Utiliser queryWithRetry au lieu de pool.query directement
+    const result = await queryWithRetry(query, params);
+    
+    const words = result.rows.map(row => ({
+      id: row.id,
+      zarmaWord: row.zarma_word,
+      zarmaExample: row.zarma_example,
+      frenchMeaning: row.french_meaning,
+      frenchExample: row.french_example,
+      category: row.category,
+      pronunciation: row.pronunciation,
+      difficultyLevel: row.difficulty_level,
+      etymology: row.etymology,
+      synonyms: parseCommaSeparated(row.synonyms),
+      antonyms: parseCommaSeparated(row.antonyms),
+      relatedWords: parseCommaSeparated(row.related_words),
+      usageFrequency: row.usage_frequency,
+      audioPath: row.audio_path,
+      imagePath: row.image_path,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      viewCount: row.view_count,
+      practiceCount: row.practice_count,
+      isLearned: row.is_learned,
+      isFavorite: row.is_favorite
+    }));
+    
+    res.json({ words, total: words.length });
+  } catch (error) {
+    console.error('Erreur lors de la récupération des mots:', error);
+    
+    // Laisser le middleware de gestion d'erreurs traiter cela
+    next(error);
+  }
+});
+
+// Fonction de démarrage du serveur mise à jour
+async function startServer() {
+  try {
+    // Test initial de connexion
+    console.log('🔍 Test de connexion PostgreSQL...');
+    const connected = await testConnection();
+    
+    if (!connected) {
+      console.error('❌ Impossible de se connecter à PostgreSQL');
+      if (process.env.NODE_ENV !== 'production') {
+        process.exit(1);
+      }
+    }
+    
+    // Initialiser la base de données
+    await initializeDatabase();
+    
+    // Démarrer la surveillance de connexion
+    startConnectionMonitoring();
+    
+    // Démarrer le serveur
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Serveur API Dictionnaire Zarma (PostgreSQL) démarré sur le port ${PORT}`);
+      console.log(`🔗 API disponible sur: http://localhost:${PORT}/api`);
+      console.log(`🔍 Surveillance de DB activée`);
+    });
+
+    // Gestion de l'arrêt propre du serveur
+    const gracefulShutdown = async (signal) => {
+      console.log(`\n${signal} reçu, arrêt propre du serveur...`);
+      server.close(async () => {
+        console.log('🔴 Serveur HTTP fermé');
+        try {
+          await pool.end();
+          console.log('✅ Connexions PostgreSQL fermées proprement');
+        } catch (error) {
+          console.error('Erreur lors de la fermeture des connexions:', error);
+        }
+        process.exit(0);
+      });
+    };
+
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    
+  } catch (error) {
+    console.error('❌ Erreur lors du démarrage du serveur:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      process.exit(1);
+    }
+  }
+}
 // Configuration de la base de données PostgreSQL pour Render
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -49,7 +240,7 @@ app.use(cors({
     'http://192.168.0.1:3000',
     'capacitor://localhost',
     'http://localhost',  
-    'https://votre-app-render.onrender.com'
+    'https://dictionnaire-zarma-api.onrender.com'
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
