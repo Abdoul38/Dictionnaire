@@ -1,10 +1,13 @@
-services:
+  services:
   - type: web
     name: dictionnaire-zarma
     env: node
     plan: free
-    buildCommand: npm install
+    region: oregon
+    buildCommand: 
+      - npm install
     startCommand: node server.js
+    healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
@@ -12,3 +15,31 @@ services:
         generateValue: true
       - key: PORT
         value: 3000
+      - key: RENDER
+        value: true
+      - key: DB_SSL
+        value: true
+      - key: DB_POOL_MAX
+        value: 10
+      - key: DB_POOL_IDLE_TIMEOUT_MS
+        value: 30000
+      - key: DB_RECONNECT_INTERVAL
+        value: 30000
+      - key: UPLOAD_PATH
+        value: /data/uploads
+      - key: LOG_FILE
+        value: /data/logs/app.log
+      - key: BACKUP_PATH
+        value: /data/backups
+    autoDeploy: true
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
+
+databases:
+  - name: dictionnaire-zarma-db
+    plan: free
+    databaseName: dictionnaire-zarma-db
+    region: oregon
+    ipAllowList: []
