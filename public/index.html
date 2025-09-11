@@ -605,75 +605,79 @@
         }
 
         // Vérifier le token avec le serveur
-        async function verifyTokenWithServer(token) {
-            try {
-                const response = await fetch(`${API_BASE}/auth/verify`, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-
-                if (!response.ok) {
-                    throw new Error('Token invalide');
-                }
-
-                const result = await response.json();
-                if (result.success) {
-                    currentUser = result.user;
-                    updateUserInfo();
-                    loadInitialData();
-                } else {
-                    throw new Error('Vérification échouée');
-                }
-            } catch (error) {
-                console.error('Erreur de vérification:', error);
-                showNotification('Session expirée. Redirection...', 'error');
-                setTimeout(() => {
-                    localStorage.clear();
-                    window.location.href = 'login.html';
-                }, 2000);
-            }
-        }
-
+        // Vérifier le token avec le serveur
+async function verifyTokenWithServer(token) {
+  try {
+    const response = await authenticatedRequest(`${API_BASE}/auth/verify`);
+    
+    if (response && response.ok) {
+      const result = await response.json();
+      if (result.success) {
+        currentUser = result.user;
+        updateUserInfo();
+        loadInitialData();
+        return true;
+      }
+    }
+    
+    // Si la vérification échoue
+    throw new Error('Vérification échouée');
+    
+  } catch (error) {
+    console.error('Erreur de vérification:', error);
+    showNotification('Session expirée. Redirection...', 'error');
+    setTimeout(() => {
+      localStorage.clear();
+      window.location.href = 'login.html';
+    }, 2000);
+    return false;
+  }
+}
         // Fonction pour faire des requêtes authentifiées
-        async function authenticatedRequest(url, options = {}) {
-            const token = localStorage.getItem('admin_token');
-            
-            const defaultOptions = {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                }
-            };
+        // Fonction pour faire des requêtes authentifiées
+async function authenticatedRequest(url, options = {}) {
+  const token = localStorage.getItem('admin_token');
+  
+  const defaultOptions = {
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
+  };
 
-            const mergedOptions = {
-                ...defaultOptions,
-                ...options,
-                headers: {
-                    ...defaultOptions.headers,
-                    ...options.headers
-                }
-            };
+  const mergedOptions = {
+    ...defaultOptions,
+    ...options,
+    headers: {
+      ...defaultOptions.headers,
+      ...options.headers
+    }
+  };
 
-            try {
-                const response = await fetch(url, mergedOptions);
-                
-                if (response.status === 401) {
-                    showNotification('Session expirée. Redirection...', 'error');
-                    setTimeout(() => {
-                        localStorage.clear();
-                        window.location.href = 'login.html';
-                    }, 2000);
-                    return null;
-                }
+  try {
+    const response = await fetch(url, mergedOptions);
+    
+    if (response.status === 401) {
+      // Token expiré ou invalide
+      const errorData = await response.json().catch(() => ({}));
+      
+      if (errorData.code === 'TOKEN_EXPIRED' || errorData.code === 'INVALID_TOKEN') {
+        showNotification('Session expirée. Redirection...', 'error');
+        setTimeout(() => {
+          localStorage.clear();
+          window.location.href = 'login.html';
+        }, 2000);
+        return null;
+      }
+    }
 
-                return response;
-            } catch (error) {
-                console.error('Erreur de requête:', error);
-                showNotification('Erreur de connexion au serveur', 'error');
-                return null;
-            }
-        }
+    return response;
+  } catch (error) {
+    console.error('Erreur de requête:', error);
+    showNotification('Erreur de connexion au serveur', 'error');
+    return null;
+  }
+}
 
         // Configuration des écouteurs d'événements
         function setupEventListeners() {
