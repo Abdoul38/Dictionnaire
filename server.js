@@ -486,6 +486,510 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
   }
 });
 
+// GET /api/quiz - Récupérer tous les quiz
+app.get('/api/quiz', async (req, res) => {
+  const { category, type, difficulty } = req.query;
+  
+  let query = `
+    SELECT q.*, COUNT(qq.id) as question_count
+    FROM quizzes q
+    LEFT JOIN quiz_questions qq ON q.id = qq.quiz_id
+    WHERE q.is_active = TRUE
+  `;
+  
+  const params = [];
+  let paramCount = 0;
+  
+  if (category) {
+    paramCount++;
+    query += ` AND q.category = $${paramCount}`;
+    params.push(category);
+  }
+  
+  if (type) {
+    paramCount++;
+    query += ` AND q.quiz_type = $${paramCount}`;
+    params.push(type);
+  }
+  
+  if (difficulty) {
+    paramCount++;
+    query += ` AND q.difficulty = $${paramCount}`;
+    params.push(difficulty);
+  }
+  
+  query += ` GROUP BY q.id ORDER BY q.created_at DESC`;
+  
+  try {
+    const result = await pool.query(query, params);
+    
+    const quizzes = result.rows.map(row => ({
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      category: row.category,
+      quizType: row.quiz_type,
+      difficulty: row.difficulty,
+      timeLimit: row.time_limit,
+      primaryColor: row.primary_color,
+      questionCount: parseInt(row.question_count),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }));
+    
+    res.json({ quizzes, total: quizzes.length });
+  } catch (error) {
+    console.error('Erreur lors de la récupération des quiz:', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération des quiz' });
+  }
+});
+
+// GET /api/quiz/:id - Récupérer un quiz spécifique avec ses questions
+app.get('/api/quiz/:id', async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    // Récupérer les informations du quiz
+    const quizResult = await pool.query('SELECT * FROM quizzes WHERE id = $1 AND is_active = TRUE', [id]);
+    
+    if (quizResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Quiz non trouvé' });
+    }
+    
+    const quiz = quizResult.rows[0];
+    
+    // Récupérer les questions du quiz
+    const questionsResult = await pool.query(`
+      SELECT qq.*, 
+             json_agg(
+               json_build_object(
+                 'id', qo.id,
+                 'optionText', qo.option_text,
+                 'isCorrect', qo.is_correct,
+                 'order', qo.option_order
+               ) ORDER BY qo.option_order
+             ) as options
+      FROM quiz_questions qq
+      LEFT JOIN question_options qo ON qq.id = qo.question_id
+      WHERE qq.quiz_id = $1
+      GROUP BY qq.id
+      ORDER BY qq.question_order
+    `, [id]);
+    
+    const questions = questionsResult.rows.map(row => ({
+      id: row.id,
+      questionText: row.question_text,
+      explanation: row.explanation,
+      audioPath: row.audio_path,
+      order: row.question_order,
+      options: row.options.filter(opt => opt.optionText !== null)
+    }));
+    
+    res.json({
+      id: quiz.id,
+      title: quiz.title,
+      description: quiz.description,
+      category: quiz.category,
+      quizType: quiz.quiz_type,
+      difficulty: quiz.difficulty,
+      timeLimit: quiz.time_limit,
+      primaryColor: quiz.primary_color,
+      questions: questions,
+      createdAt: quiz.created_at,
+      updatedAt: quiz.updated_at
+    });
+  } catch (error) {
+    console.error('Erreur lors de la récupération du quiz:', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération du quiz' });
+  }
+});
+
+// POST /api/quiz - Créer un nouveau quiz (protégé)
+app.post('/api/quiz', authenticateToken, async (req, res) => {
+  const {
+    title,
+    description,
+    category,
+    quizType,
+    difficulty,
+    timeLimit = 30,
+    primaryColor,
+    questions
+  } = req.body;
+  
+  // Validation de base
+  if (!title || !description || !category || !quizType || !difficulty) {
+    return res.status(400).json({ error: 'Tous les champs obligatoires doivent être remplis' });
+  }
+  
+  if (!questions || !Array.isArray(questions) || questions.length === 0) {
+    return res.status(400).json({ error: 'Le quiz doit contenir au moins une question' });
+  }
+  
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    // Insérer le quiz
+    const quizResult = await client.query(`
+      INSERT INTO quizzes (title, description, category, quiz_type, difficulty, time_limit, primary_color)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING id
+    `, [title, description, category, quizType, difficulty, timeLimit, primaryColor]);
+    
+    const quizId = quizResult.rows[0].id;
+    
+    // Insérer les questions et options
+    for (let i = 0; i < questions.length; i++) {
+      const question = questions[i];
+      
+      const questionResult = await client.query(`
+        INSERT INTO quiz_questions (quiz_id, question_text, explanation, audio_path, question_order)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id
+      `, [quizId, question.question, question.explanation, question.audioPath, i]);
+      
+      const questionId = questionResult.rows[0].id;
+      
+      // Insérer les options
+      for (let j = 0; j < question.options.length; j++) {
+        const option = question.options[j];
+        
+        await client.query(`
+          INSERT INTO question_options (question_id, option_text, is_correct, option_order)
+          VALUES ($1, $2, $3, $4)
+        `, [questionId, option, j === question.correct, j]);
+      }
+    }
+    
+    await client.query('COMMIT');
+    
+    res.status(201).json({
+      id: quizId,
+      message: 'Quiz créé avec succès'
+    });
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Erreur lors de la création du quiz:', error);
+    res.status(500).json({ error: 'Erreur lors de la création du quiz' });
+  } finally {
+    client.release();
+  }
+});
+
+// PUT /api/quiz/:id - Modifier un quiz (protégé)
+app.put('/api/quiz/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const {
+    title,
+    description,
+    category,
+    quizType,
+    difficulty,
+    timeLimit,
+    primaryColor,
+    questions
+  } = req.body;
+  
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    // Mettre à jour le quiz
+    await client.query(`
+      UPDATE quizzes 
+      SET title = $1, description = $2, category = $3, quiz_type = $4, 
+          difficulty = $5, time_limit = $6, primary_color = $7, updated_at = NOW()
+      WHERE id = $8
+    `, [title, description, category, quizType, difficulty, timeLimit, primaryColor, id]);
+    
+    // Supprimer les anciennes questions et options
+    await client.query('DELETE FROM question_options WHERE question_id IN (SELECT id FROM quiz_questions WHERE quiz_id = $1)', [id]);
+    await client.query('DELETE FROM quiz_questions WHERE quiz_id = $1', [id]);
+    
+    // Insérer les nouvelles questions et options
+    for (let i = 0; i < questions.length; i++) {
+      const question = questions[i];
+      
+      const questionResult = await client.query(`
+        INSERT INTO quiz_questions (quiz_id, question_text, explanation, audio_path, question_order)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id
+      `, [id, question.question, question.explanation, question.audioPath, i]);
+      
+      const questionId = questionResult.rows[0].id;
+      
+      // Insérer les options
+      for (let j = 0; j < question.options.length; j++) {
+        const option = question.options[j];
+        
+        await client.query(`
+          INSERT INTO question_options (question_id, option_text, is_correct, option_order)
+          VALUES ($1, $2, $3, $4)
+        `, [questionId, option, j === question.correct, j]);
+      }
+    }
+    
+    await client.query('COMMIT');
+    
+    res.json({ message: 'Quiz modifié avec succès' });
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Erreur lors de la modification du quiz:', error);
+    res.status(500).json({ error: 'Erreur lors de la modification du quiz' });
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE /api/quiz/:id - Supprimer un quiz (protégé)
+app.delete('/api/quiz/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    // Utiliser CASCADE pour supprimer automatiquement les questions et options associées
+    await pool.query('DELETE FROM quizzes WHERE id = $1', [id]);
+    res.json({ message: 'Quiz supprimé avec succès' });
+  } catch (error) {
+    console.error('Erreur lors de la suppression du quiz:', error);
+    res.status(500).json({ error: 'Erreur lors de la suppression du quiz' });
+  }
+});
+
+// Routes pour les exercices
+// POST /api/exercise - Créer un nouvel exercice (protégé)
+app.post('/api/exercise', authenticateToken, async (req, res) => {
+  const {
+    title,
+    description,
+    type,
+    primaryColor,
+    items
+  } = req.body;
+  
+  // Validation de base
+  if (!title || !description || !type) {
+    return res.status(400).json({ error: 'Tous les champs obligatoires doivent être remplis' });
+  }
+  
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'L\'exercice doit contenir au moins un élément' });
+  }
+  
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    // Insérer l'exercice
+    const exerciseResult = await client.query(`
+      INSERT INTO exercises (title, description, exercise_type, primary_color)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id
+    `, [title, description, type, primaryColor]);
+    
+    const exerciseId = exerciseResult.rows[0].id;
+    
+    // Insérer les éléments
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      
+      await client.query(`
+        INSERT INTO exercise_items (exercise_id, zarma_text, french_text, tip, audio_path, item_order)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `, [exerciseId, item.zarmaText, item.frenchText, item.tip, item.audioPath, i]);
+    }
+    
+    await client.query('COMMIT');
+    
+    res.status(201).json({
+      id: exerciseId,
+      message: 'Exercice créé avec succès'
+    });
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Erreur lors de la création de l\'exercice:', error);
+    res.status(500).json({ error: 'Erreur lors de la création de l\'exercice' });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /api/exercise - Récupérer tous les exercices
+app.get('/api/exercise', async (req, res) => {
+  const { type } = req.query;
+  
+  let query = `
+    SELECT e.*, COUNT(ei.id) as item_count
+    FROM exercises e
+    LEFT JOIN exercise_items ei ON e.id = ei.exercise_id
+    WHERE e.is_active = TRUE
+  `;
+  
+  const params = [];
+  let paramCount = 0;
+  
+  if (type) {
+    paramCount++;
+    query += ` AND e.exercise_type = $${paramCount}`;
+    params.push(type);
+  }
+  
+  query += ` GROUP BY e.id ORDER BY e.created_at DESC`;
+  
+  try {
+    const result = await pool.query(query, params);
+    
+    const exercises = result.rows.map(row => ({
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      exerciseType: row.exercise_type,
+      primaryColor: row.primary_color,
+      itemCount: parseInt(row.item_count),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }));
+    
+    res.json({ exercises, total: exercises.length });
+  } catch (error) {
+    console.error('Erreur lors de la récupération des exercices:', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération des exercices' });
+  }
+});
+
+// GET /api/exercise/:id - Récupérer un exercice spécifique avec ses éléments
+app.get('/api/exercise/:id', async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    // Récupérer les informations de l'exercice
+    const exerciseResult = await pool.query('SELECT * FROM exercises WHERE id = $1 AND is_active = TRUE', [id]);
+    
+    if (exerciseResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Exercice non trouvé' });
+    }
+    
+    const exercise = exerciseResult.rows[0];
+    
+    // Récupérer les éléments de l'exercice
+    const itemsResult = await pool.query(`
+      SELECT * FROM exercise_items 
+      WHERE exercise_id = $1 
+      ORDER BY item_order
+    `, [id]);
+    
+    const items = itemsResult.rows.map(row => ({
+      id: row.id,
+      zarmaText: row.zarma_text,
+      frenchText: row.french_text,
+      tip: row.tip,
+      audioPath: row.audio_path,
+      order: row.item_order
+    }));
+    
+    res.json({
+      id: exercise.id,
+      title: exercise.title,
+      description: exercise.description,
+      exerciseType: exercise.exercise_type,
+      primaryColor: exercise.primary_color,
+      items: items,
+      createdAt: exercise.created_at,
+      updatedAt: exercise.updated_at
+    });
+  } catch (error) {
+    console.error('Erreur lors de la récupération de l\'exercice:', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération de l\'exercice' });
+  }
+});
+
+// PUT /api/exercise/:id - Modifier un exercice (protégé)
+app.put('/api/exercise/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const {
+    title,
+    description,
+    type,
+    primaryColor,
+    items
+  } = req.body;
+  
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    // Mettre à jour l'exercice
+    await client.query(`
+      UPDATE exercises 
+      SET title = $1, description = $2, exercise_type = $3, primary_color = $4, updated_at = NOW()
+      WHERE id = $5
+    `, [title, description, type, primaryColor, id]);
+    
+    // Supprimer les anciens éléments
+    await client.query('DELETE FROM exercise_items WHERE exercise_id = $1', [id]);
+    
+    // Insérer les nouveaux éléments
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      
+      await client.query(`
+        INSERT INTO exercise_items (exercise_id, zarma_text, french_text, tip, audio_path, item_order)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `, [id, item.zarmaText, item.frenchText, item.tip, item.audioPath, i]);
+    }
+    
+    await client.query('COMMIT');
+    
+    res.json({ message: 'Exercice modifié avec succès' });
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Erreur lors de la modification de l\'exercice:', error);
+    res.status(500).json({ error: 'Erreur lors de la modification de l\'exercice' });
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE /api/exercise/:id - Supprimer un exercice (protégé)
+app.delete('/api/exercise/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    // Utiliser CASCADE pour supprimer automatiquement les éléments associés
+    await pool.query('DELETE FROM exercises WHERE id = $1', [id]);
+    res.json({ message: 'Exercice supprimé avec succès' });
+  } catch (error) {
+    console.error('Erreur lors de la suppression de l\'exercice:', error);
+    res.status(500).json({ error: 'Erreur lors de la suppression de l\'exercice' });
+  }
+});
+
+// Middleware d'authentification (doit être défini ailleurs dans votre application)
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Token d\'accès requis' });
+  }
+
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'Token invalide' });
+    }
+    req.user = user;
+    next();
+  });
+}
+
 // GET /api/auth/verify - Vérifier un token
 app.get('/api/auth/verify', authenticateToken, (req, res) => {
   res.json({
@@ -1555,6 +2059,80 @@ async function initializeDatabase() {
         UNIQUE(date)
       )
     `);
+    await pool.query(`
+  CREATE TABLE IF NOT EXISTS quizzes(
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    category VARCHAR(100),
+    quiz_type VARCHAR(100),
+    difficulty VARCHAR(50),
+    time_limit INTEGER DEFAULT 30,
+    primary_color VARCHAR(7),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()),
+    updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())
+  )
+`);
+
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS quiz_questions(
+    id SERIAL PRIMARY KEY,
+    quiz_id INTEGER NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+    question_text TEXT NOT NULL,
+    explanation TEXT,
+    audio_path VARCHAR(255),
+    question_order INTEGER DEFAULT 0,
+    created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())
+  )
+`);
+
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS question_options(
+    id SERIAL PRIMARY KEY,
+    question_id INTEGER NOT NULL REFERENCES quiz_questions(id) ON DELETE CASCADE,
+    option_text TEXT NOT NULL,
+    is_correct BOOLEAN DEFAULT FALSE,
+    option_order INTEGER DEFAULT 0,
+    created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())
+  )
+`);
+
+// Tables pour les exercices
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS exercises(
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    exercise_type VARCHAR(100),
+    primary_color VARCHAR(7),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()),
+    updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())
+  )
+`);
+
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS exercise_items(
+    id SERIAL PRIMARY KEY,
+    exercise_id INTEGER NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
+    zarma_text TEXT NOT NULL,
+    french_text TEXT NOT NULL,
+    tip TEXT,
+    audio_path VARCHAR(255),
+    item_order INTEGER DEFAULT 0,
+    created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())
+  )
+`);
+
+// Créer les index pour les nouvelles tables
+await pool.query('CREATE INDEX IF NOT EXISTS idx_quizzes_category ON quizzes(category)');
+await pool.query('CREATE INDEX IF NOT EXISTS idx_quizzes_type ON quizzes(quiz_type)');
+await pool.query('CREATE INDEX IF NOT EXISTS idx_quiz_questions_quiz ON quiz_questions(quiz_id)');
+await pool.query('CREATE INDEX IF NOT EXISTS idx_question_options_question ON question_options(question_id)');
+await pool.query('CREATE INDEX IF NOT EXISTS idx_exercises_type ON exercises(exercise_type)');
+await pool.query('CREATE INDEX IF NOT EXISTS idx_exercise_items_exercise ON exercise_items(exercise_id)');
+
 
     // Créer les index
     await pool.query('CREATE INDEX IF NOT EXISTS idx_words_zarma ON words(zarma_word)');
