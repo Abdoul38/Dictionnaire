@@ -309,7 +309,7 @@
         .notification.show {
             transform: translateX(0);
         }
-
+       
         .notification.success {
             background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
         }
@@ -389,9 +389,10 @@
                 <h1>Administration - Dictionnaire Zarma</h1>
                 <p>Interface de gestion des mots et données du dictionnaire</p>
             </div>
-            <button class="btn btn-secondary" onclick="window.location.href='Quiz.html'">
-                Retour au dictionnaire
+            <button class="btn">
+                <a href="Quiz.html" style="color: white; text-decoration: none;">Page des Quiz</a>
             </button>
+            
             <div class="header-right">
                 <div class="user-info" id="userInfo">
                     Connecté en tant que: <span id="currentUser">Chargement...</span>
