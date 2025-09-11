@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Administration Quiz - Dictionnaire Zarma</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+            color: white;
+            padding: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.8;
+            font-size: 1.1rem;
+        }
+
+        .tabs {
+            display: flex;
+            background: #f7fafc;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #718096;
+            transition: all 0.3s ease;
+        }
+
+        .tab.active {
+            background: white;
+            color: #2d3748;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 30px;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-section {
+            background: #f8fafc;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+            border: 2px solid #e2e8f0;
+        }
+
+        .form-section h3 {
+            color: #2d3748;
+            margin-bottom: 20px;
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .questions-container {
+            border: 2px dashed #cbd5e0;
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+            min-height: 200px;
+        }
+
+        .question-card {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .question-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 15px;
+            background: #667eea;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 10px;
+        }
+
+        .question-number {
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .remove-question {
+            background: #e53e3e;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .options-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .option-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .option-radio {
+            width: 20px;
+            height: 20px;
+        }
+
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn:hover {
+            background: #5a67d8;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #2d3748;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+
+        .btn-success {
+            background: #48bb78;
+        }
+
+        .btn-success:hover {
+            background: #38a169;
+        }
+
+        .btn-danger {
+            background: #e53e3e;
+        }
+
+        .btn-danger:hover {
+            background: #c53030;
+        }
+
+        .btn-add {
+            background: #38a169;
+            margin: 20px 0;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .quiz-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .quiz-card {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 15px;
+            padding: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .quiz-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .quiz-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .quiz-title {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: #2d3748;
+        }
+
+        .quiz-category {
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .quiz-meta {
+            display: flex;
+            justify-content: space-between;
+            color: #718096;
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+        }
+
+        .quiz-description {
+            color: #4a5568;
+            margin-bottom: 15px;
+            line-height: 1.4;
+        }
+
+        .quiz-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .quiz-actions .btn {
+            font-size: 0.8rem;
+            padding: 8px 16px;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+            z-index: 1000;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+            max-width: 300px;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification.success {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+        }
+
+        .notification.error {
+            background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+
+        .loading::after {
+            content: '';
+            width: 40px;
+            height: 40px;
+            border: 3px solid #e2e8f0;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .search-bar {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        .search-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 1rem;
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                text-align: center;
+                gap: 15px;
+            }
+
+            .tabs {
+                flex-direction: column;
+            }
+            
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .options-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .quiz-list {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>Administration des Quiz</h1>
+                <p>Interface de gestion des quiz et exercices Zarma</p>
+            </div>
+            <button class="btn btn-secondary" onclick="window.location.href='index.html'">
+                Retour au dictionnaire
+            </button>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="create-quiz">Créer un Quiz</button>
+            <button class="tab" data-tab="manage-quiz">Gérer les Quiz</button>
+            <button class="tab" data-tab="create-exercise">Créer un Exercice</button>
+        </div>
+
+        <!-- Onglet Créer un Quiz -->
+        <div id="create-quiz" class="tab-content active">
+            <form id="quiz-form">
+                <div class="form-section">
+                    <h3>📝 Informations générales du Quiz</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="quiz-title">Titre du Quiz *</label>
+                            <input type="text" id="quiz-title" required placeholder="Ex: Vocabulaire de base">
+                        </div>
+                        <div class="form-group">
+                            <label for="quiz-category">Catégorie *</label>
+                            <select id="quiz-category" required>
+                                <option value="">Sélectionner...</option>
+                                <option value="language">Langue</option>
+                                <option value="history">Histoire</option>
+                                <option value="culture">Culture</option>
+                                <option value="geography">Géographie</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="quiz-type">Type de Quiz *</label>
+                            <select id="quiz-type" required>
+                                <option value="">Sélectionner...</option>
+                                <option value="vocabulary">Vocabulaire</option>
+                                <option value="grammar">Grammaire</option>
+                                <option value="origins">Origines</option>
+                                <option value="traditions">Traditions</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="quiz-difficulty">Niveau de Difficulté *</label>
+                            <select id="quiz-difficulty" required>
+                                <option value="Débutant">Débutant</option>
+                                <option value="Intermédiaire">Intermédiaire</option>
+                                <option value="Avancé">Avancé</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="quiz-description">Description *</label>
+                        <textarea id="quiz-description" required placeholder="Description du contenu du quiz"></textarea>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3>❓ Questions du Quiz</h3>
+                    <div class="questions-container" id="questions-container">
+                        <p style="text-align: center; color: #718096; margin: 50px 0;">
+                            Aucune question ajoutée. Cliquez sur "Ajouter une Question" pour commencer.
+                        </p>
+                    </div>
+                    <button type="button" class="btn btn-add" onclick="addQuestion()">
+                        + Ajouter une Question
+                    </button>
+                </div>
+
+                <div style="text-align: center; padding: 20px;">
+                    <button type="submit" class="btn btn-success" id="save-quiz-btn">
+                        💾 Enregistrer le Quiz
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="clearQuizForm()">
+                        🗑️ Vider le formulaire
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Onglet Gérer les Quiz -->
+        <div id="manage-quiz" class="tab-content">
+            <div class="search-bar">
+                <input type="text" class="search-input" id="search-quiz" placeholder="Rechercher un quiz...">
+                <select id="filter-category">
+                    <option value="">Toutes catégories</option>
+                    <option value="language">Langue</option>
+                    <option value="history">Histoire</option>
+                    <option value="culture">Culture</option>
+                    <option value="geography">Géographie</option>
+                </select>
+                <button class="btn btn-secondary" onclick="loadQuizList()">🔄 Actualiser</button>
+            </div>
+            
+            <div id="quiz-loading" class="loading" style="display: none;">
+                Chargement des quiz...
+            </div>
+            
+            <div id="quiz-list" class="quiz-list">
+                <!-- Les quiz seront chargés ici -->
+            </div>
+        </div>
+
+        <!-- Onglet Créer un Exercice -->
+        <div id="create-exercise" class="tab-content">
+            <form id="exercise-form">
+                <div class="form-section">
+                    <h3>🏋️ Informations générales de l'Exercice</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="exercise-title">Titre de l'Exercice *</label>
+                            <input type="text" id="exercise-title" required placeholder="Ex: Exercice de prononciation">
+                        </div>
+                        <div class="form-group">
+                            <label for="exercise-type">Type d'Exercice *</label>
+                            <select id="exercise-type" required>
+                                <option value="">Sélectionner...</option>
+                                <option value="pronunciation">Prononciation</option>
+                                <option value="translation">Traduction</option>
+                                <option value="listening">Écoute</option>
+                                <option value="writing">Écriture</option>
+                                <option value="conversation">Conversation</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="exercise-description">Description *</label>
+                        <textarea id="exercise-description" required placeholder="Description de l'exercice"></textarea>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3>📚 Éléments de l'Exercice</h3>
+                    <div id="exercise-items-container" class="questions-container">
+                        <p style="text-align: center; color: #718096; margin: 50px 0;">
+                            Aucun élément ajouté. Cliquez sur "Ajouter un Élément" pour commencer.
+                        </p>
+                    </div>
+                    <button type="button" class="btn btn-add" onclick="addExerciseItem()">
+                        + Ajouter un Élément
+                    </button>
+                </div>
+
+                <div style="text-align: center; padding: 20px;">
+                    <button type="submit" class="btn btn-success" id="save-exercise-btn">
+                        💾 Enregistrer l'Exercice
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="clearExerciseForm()">
+                        🗑️ Vider le formulaire
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <script>
+        // Variables globales
+        let questionCounter = 0;
+        let exerciseItemCounter = 0;
+        let quizList = [];
+
+        // Configuration de l'API
+        const API_BASE = window.location.origin + '/api';
+
+        // Initialisation
+        document.addEventListener('DOMContentLoaded', function() {
+            setupTabNavigation();
+            setupEventListeners();
+            loadQuizList();
+        });
+
+        // Configuration de la navigation par onglets
+        function setupTabNavigation() {
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    const tabName = this.getAttribute('data-tab');
+                    showTab(tabName);
+                });
+            });
+        }
+
+        // Afficher un onglet
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            const tabContent = document.getElementById(tabName);
+            const tabButton = document.querySelector(`.tab[data-tab="${tabName}"]`);
+            
+            if (tabContent && tabButton) {
+                tabContent.classList.add('active');
+                tabButton.classList.add('active');
+                
+                if (tabName === 'manage-quiz') {
+                    loadQuizList();
+                }
+            }
+        }
+
+        // Configuration des écouteurs d'événements
+        function setupEventListeners() {
+            document.getElementById('quiz-form').addEventListener('submit', handleQuizSubmit);
+            document.getElementById('exercise-form').addEventListener('submit', handleExerciseSubmit);
+            document.getElementById('search-quiz').addEventListener('input', debounce(filterQuizList, 300));
+            document.getElementById('filter-category').addEventListener('change', filterQuizList);
+        }
+
+        // Ajouter une question
+        function addQuestion() {
+            questionCounter++;
+            const container = document.getElementById('questions-container');
+            
+            // Supprimer le message d'absence de questions
+            const emptyMessage = container.querySelector('p');
+            if (emptyMessage) {
+                emptyMessage.remove();
+            }
+
+            const questionDiv = document.createElement('div');
+            questionDiv.className = 'question-card';
+            questionDiv.id = `question-${questionCounter}`;
+            
+            questionDiv.innerHTML = `
+                <div class="question-header">
+                    <span class="question-number">Question ${questionCounter}</span>
+                    <button type="button" class="remove-question" onclick="removeQuestion(${questionCounter})">×</button>
+                </div>
+                
+                <div class="form-group">
+                    <label>Texte de la question *</label>
+                    <textarea name="question-text-${questionCounter}" required placeholder="Saisissez votre question ici..."></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>Options de réponse</label>
+                    <div class="options-grid">
+                        <div class="option-group">
+                            <input type="radio" name="correct-${questionCounter}" value="0" class="option-radio" required>
+                            <input type="text" name="option-0-${questionCounter}" placeholder="Option A" required>
+                        </div>
+                        <div class="option-group">
+                            <input type="radio" name="correct-${questionCounter}" value="1" class="option-radio">
+                            <input type="text" name="option-1-${questionCounter}" placeholder="Option B" required>
+                        </div>
+                        <div class="option-group">
+                            <input type="radio" name="correct-${questionCounter}" value="2" class="option-radio">
+                            <input type="text" name="option-2-${questionCounter}" placeholder="Option C" required>
+                        </div>
+                        <div class="option-group">
+                            <input type="radio" name="correct-${questionCounter}" value="3" class="option-radio">
+                            <input type="text" name="option-3-${questionCounter}" placeholder="Option D" required>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Explication de la réponse *</label>
+                    <textarea name="explanation-${questionCounter}" required placeholder="Expliquez pourquoi cette réponse est correcte..."></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>Audio (optionnel)</label>
+                    <input type="text" name="audio-${questionCounter}" placeholder="Chemin vers le fichier audio">
+                </div>
+            `;
+            
+            container.appendChild(questionDiv);
+        }
+
+        // Supprimer une question
+        function removeQuestion(id) {
+            const questionDiv = document.getElementById(`question-${id}`);
+            if (questionDiv) {
+                questionDiv.remove();
+                
+                // Réafficher le message si plus de questions
+                const container = document.getElementById('questions-container');
+                if (container.children.length === 0) {
+                    container.innerHTML = `
+                        <p style="text-align: center; color: #718096; margin: 50px 0;">
+                            Aucune question ajoutée. Cliquez sur "Ajouter une Question" pour commencer.
+                        </p>
+                    `;
+                }
+            }
+        }
+
+        // Ajouter un élément d'exercice
+        function addExerciseItem() {
+            exerciseItemCounter++;
+            const container = document.getElementById('exercise-items-container');
+            
+            // Supprimer le message d'absence d'éléments
+            const emptyMessage = container.querySelector('p');
+            if (emptyMessage) {
+                emptyMessage.remove();
+            }
+
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'question-card';
+            itemDiv.id = `exercise-item-${exerciseItemCounter}`;
+            
+            itemDiv.innerHTML = `
+                <div class="question-header">
+                    <span class="question-number">Élément ${exerciseItemCounter}</span>
+                    <button type="button" class="remove-question" onclick="removeExerciseItem(${exerciseItemCounter})">×</button>
+                </div>
+                
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Texte en Zarma *</label>
+                        <input type="text" name="zarma-text-${exerciseItemCounter}" required placeholder="Texte en zarma">
+                    </div>
+                    <div class="form-group">
+                        <label>Texte en Français *</label>
+                        <input type="text" name="french-text-${exerciseItemCounter}" required placeholder="Traduction française">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Conseil/Astuce</label>
+                    <textarea name="tip-${exerciseItemCounter}" placeholder="Conseil pour l'apprenant..."></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>Chemin Audio</label>
+                    <input type="text" name="audio-path-${exerciseItemCounter}" placeholder="assets/audio/example.mp3">
+                </div>
+            `;
+            
+            container.appendChild(itemDiv);
+        }
+
+        // Supprimer un élément d'exercice
+        function removeExerciseItem(id) {
+            const itemDiv = document.getElementById(`exercise-item-${id}`);
+            if (itemDiv) {
+                itemDiv.remove();
+                
+                // Réafficher le message si plus d'éléments
+                const container = document.getElementById('exercise-items-container');
+                if (container.children.length === 0) {
+                    container.innerHTML = `
+                        <p style="text-align: center; color: #718096; margin: 50px 0;">
+                            Aucun élément ajouté. Cliquez sur "Ajouter un Élément" pour commencer.
+                        </p>
+                    `;
+                }
+            }
+        }
+
+        // Gérer la soumission du quiz
+        async function handleQuizSubmit(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const questions = [];
+            
+            // Collecter toutes les questions
+            const questionCards = document.querySelectorAll('.question-card');
+            
+            if (questionCards.length === 0) {
+                showNotification('Veuillez ajouter au moins une question', 'error');
+                return;
+            }
+
+            for (let card of questionCards) {
+                const id = card.id.split('-')[1];
+                const questionText = formData.get(`question-text-${id}`);
+                const explanation = formData.get(`explanation-${id}`);
+                const audio = formData.get(`audio-${id}`);
+                const correct = parseInt(formData.get(`correct-${id}`));
+                
+                const options = [
+                    formData.get(`option-0-${id}`),
+                    formData.get(`option-1-${id}`),
+                    formData.get(`option-2-${id}`),
+                    formData.get(`option-3-${id}`)
+                ];
+
+                // Vérifier que toutes les options sont remplies
+                if (options.some(opt => !opt || !opt.trim())) {
+                    showNotification('Toutes les options doivent être remplies', 'error');
+                    return;
+                }
+
+                questions.push({
+                    id: `q_${Date.now()}_${id}`,
+                    question: questionText,
+                    options: options,
+                    correct: correct,
+                    explanation: explanation,
+                    audioPath: audio || null
+                });
+            }
+
+            const quizData = {
+                id: `quiz_${Date.now()}`,
+                title: document.getElementById('quiz-title').value,
+                description: document.getElementById('quiz-description').value,
+                difficulty: document.getElementById('quiz-difficulty').value,
+                category: document.getElementById('quiz-category').value,
+                quizType: document.getElementById('quiz-type').value,
+                questions: questions,
+                timeLimit: 30,
+                primaryColor: getCategoryColor(document.getElementById('quiz-category').value)
+            };
+
+            const submitBtn = document.getElementById('save-quiz-btn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = '💾 Enregistrement...';
+
+            try {
+                const response = await fetch(`${API_BASE}/quiz`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(quizData)
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    showNotification('Quiz créé avec succès!');
+                    clearQuizForm();
+                    loadQuizList();
+                } else {
+                    const error = await response.json();
+                    showNotification(error.message || 'Erreur lors de la création du quiz', 'error');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('Erreur de connexion au serveur', 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '💾 Enregistrer le Quiz';
+            }
+        }
+
+        // Gérer la soumission de l'exercice
+        async function handleExerciseSubmit(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const items = [];
+            
+            // Collecter tous les éléments
+            const itemCards = document.querySelectorAll('#exercise-items-container .question-card');
+            
+            if (itemCards.length === 0) {
+                showNotification('Veuillez ajouter au moins un élément', 'error');
+                return;
+            }
+
+            for (let card of itemCards) {
+                const id = card.id.split('-')[2];
+                const zarmaText = formData.get(`zarma-text-${id}`);
+                const frenchText = formData.get(`french-text-${id}`);
+                const tip = formData.get(`tip-${id}`);
+                const audioPath = formData.get(`audio-path-${id}`);
+
+                items.push({
+                    id: `item_${Date.now()}_${id}`,
+                    zarmaText: zarmaText,
+                    frenchText: frenchText,
+                    tip: tip || null,
+                    audioPath: audioPath || null
+                });
+            }
+
+            const exerciseData = {
+                id: `exercise_${Date.now()}`,
+                title: document.getElementById('exercise-title').value,
+                description: document.getElementById('exercise-description').value,
+                type: document.getElementById('exercise-type').value,
+                items: items,
+                primaryColor: getExerciseTypeColor(document.getElementById('exercise-type').value)
+            };
+
+            const submitBtn = document.getElementById('save-exercise-btn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = '💾 Enregistrement...';
+
+            try {
+                const response = await fetch(`${API_BASE}/exercise`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(exerciseData)
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    showNotification('Exercice créé avec succès!');
+                    clearExerciseForm();
+                } else {
+                    const error = await response.json();
+                    showNotification(error.message || 'Erreur lors de la création de l\'exercice', 'error');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('Erreur de connexion au serveur', 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '💾 Enregistrer l\'Exercice';
+            }
+        }
+
+        // Charger la liste des quiz
+        async function loadQuizList() {
+            const container = document.getElementById('quiz-list');
+            const loading = document.getElementById('quiz-loading');
+            
+            if (loading) {
+                loading.style.display = 'block';
+            }
+            container.innerHTML = '';
+
+            try {
+                const response = await fetch(`${API_BASE}/quiz`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    quizList = data.quizzes || [];
+                    displayQuizList(quizList);
+                } else {
+                    showNotification('Erreur lors du chargement des quiz', 'error');
+                    container.innerHTML = '<p style="text-align: center; color: #718096; padding: 40px;">Erreur lors du chargement des quiz</p>';
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('Erreur de connexion', 'error');
+                container.innerHTML = '<p style="text-align: center; color: #718096; padding: 40px;">Erreur de connexion au serveur</p>';
+            } finally {
+                if (loading) {
+                    loading.style.display = 'none';
+                }
+            }
+        }
+
+        // Afficher la liste des quiz
+        function displayQuizList(quizzes) {
+            const container = document.getElementById('quiz-list');
+            
+            if (quizzes.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #718096; padding: 40px;">Aucun quiz trouvé</p>';
+                return;
+            }
+
+            container.innerHTML = quizzes.map(quiz => `
+                <div class="quiz-card">
+                    <div class="quiz-header">
+                        <div class="quiz-title">${quiz.title}</div>
+                        <div class="quiz-category">${quiz.category}</div>
+                    </div>
+                    <div class="quiz-meta">
+                        <span>Difficulté: ${quiz.difficulty}</span>
+                        <span>${quiz.questions.length} questions</span>
+                    </div>
+                    <div class="quiz-description">${quiz.description}</div>
+                    <div class="quiz-actions">
+                        <button class="btn btn-secondary" onclick="editQuiz('${quiz.id}')">Modifier</button>
+                        <button class="btn btn-danger" onclick="deleteQuiz('${quiz.id}', '${quiz.title}')">Supprimer</button>
+                        <button class="btn" onclick="duplicateQuiz('${quiz.id}')">Dupliquer</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Filtrer la liste des quiz
+        function filterQuizList() {
+            const searchTerm = document.getElementById('search-quiz').value.toLowerCase();
+            const categoryFilter = document.getElementById('filter-category').value;
+
+            let filteredQuizzes = quizList;
+
+            if (searchTerm) {
+                filteredQuizzes = filteredQuizzes.filter(quiz => 
+                    quiz.title.toLowerCase().includes(searchTerm) ||
+                    quiz.description.toLowerCase().includes(searchTerm)
+                );
+            }
+
+            if (categoryFilter) {
+                filteredQuizzes = filteredQuizzes.filter(quiz => quiz.category === categoryFilter);
+            }
+
+            displayQuizList(filteredQuizzes);
+        }
+
+        // Modifier un quiz
+        async function editQuiz(quizId) {
+            try {
+                const response = await fetch(`${API_BASE}/quiz/${quizId}`);
+                
+                if (response.ok) {
+                    const quiz = await response.json();
+                    
+                    // Remplir le formulaire avec les données du quiz
+                    document.getElementById('quiz-title').value = quiz.title;
+                    document.getElementById('quiz-category').value = quiz.category;
+                    document.getElementById('quiz-type').value = quiz.quizType;
+                    document.getElementById('quiz-difficulty').value = quiz.difficulty;
+                    document.getElementById('quiz-description').value = quiz.description;
+                    
+                    // Vider le conteneur de questions
+                    const container = document.getElementById('questions-container');
+                    container.innerHTML = '';
+                    questionCounter = 0;
+                    
+                    // Ajouter chaque question
+                    quiz.questions.forEach(question => {
+                        addQuestion();
+                        const currentId = questionCounter;
+                        
+                        // Remplir les données de la question
+                        document.querySelector(`textarea[name="question-text-${currentId}"]`).value = question.question;
+                        document.querySelector(`textarea[name="explanation-${currentId}"]`).value = question.explanation;
+                        
+                        if (question.audioPath) {
+                            document.querySelector(`input[name="audio-${currentId}"]`).value = question.audioPath;
+                        }
+                        
+                        // Remplir les options et marquer la bonne réponse
+                        question.options.forEach((option, index) => {
+                            document.querySelector(`input[name="option-${index}-${currentId}"]`).value = option;
+                        });
+                        
+                        document.querySelector(`input[name="correct-${currentId}"][value="${question.correct}"]`).checked = true;
+                    });
+                    
+                    // Passer à l'onglet de création
+                    showTab('create-quiz');
+                    showNotification('Quiz chargé pour modification');
+                    
+                    // Modifier le comportement du formulaire pour la mise à jour
+                    const form = document.getElementById('quiz-form');
+                    form.onsubmit = async function(e) {
+                        e.preventDefault();
+                        await updateQuiz(quizId, e);
+                    };
+                    
+                    document.getElementById('save-quiz-btn').textContent = '🔄 Mettre à jour le Quiz';
+                    
+                } else {
+                    showNotification('Erreur lors du chargement du quiz', 'error');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('Erreur de connexion', 'error');
+            }
+        }
+
+        // Mettre à jour un quiz existant
+        async function updateQuiz(quizId, e) {
+            const formData = new FormData(e.target);
+            const questions = [];
+            
+            // Collecter toutes les questions (même logique que la création)
+            const questionCards = document.querySelectorAll('.question-card');
+            
+            for (let card of questionCards) {
+                const id = card.id.split('-')[1];
+                const questionText = formData.get(`question-text-${id}`);
+                const explanation = formData.get(`explanation-${id}`);
+                const audio = formData.get(`audio-${id}`);
+                const correct = parseInt(formData.get(`correct-${id}`));
+                
+                const options = [
+                    formData.get(`option-0-${id}`),
+                    formData.get(`option-1-${id}`),
+                    formData.get(`option-2-${id}`),
+                    formData.get(`option-3-${id}`)
+                ];
+
+                questions.push({
+                    id: `q_${Date.now()}_${id}`,
+                    question: questionText,
+                    options: options,
+                    correct: correct,
+                    explanation: explanation,
+                    audioPath: audio || null
+                });
+            }
+
+            const quizData = {
+                id: quizId,
+                title: document.getElementById('quiz-title').value,
+                description: document.getElementById('quiz-description').value,
+                difficulty: document.getElementById('quiz-difficulty').value,
+                category: document.getElementById('quiz-category').value,
+                quizType: document.getElementById('quiz-type').value,
+                questions: questions,
+                timeLimit: 30,
+                primaryColor: getCategoryColor(document.getElementById('quiz-category').value)
+            };
+
+            const submitBtn = document.getElementById('save-quiz-btn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = '🔄 Mise à jour...';
+
+            try {
+                const response = await fetch(`${API_BASE}/quiz/${quizId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(quizData)
+                });
+
+                if (response.ok) {
+                    showNotification('Quiz mis à jour avec succès!');
+                    clearQuizForm();
+                    loadQuizList();
+                    
+                    // Restaurer le comportement normal du formulaire
+                    document.getElementById('quiz-form').onsubmit = handleQuizSubmit;
+                    document.getElementById('save-quiz-btn').textContent = '💾 Enregistrer le Quiz';
+                } else {
+                    const error = await response.json();
+                    showNotification(error.message || 'Erreur lors de la mise à jour', 'error');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('Erreur de connexion au serveur', 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '🔄 Mettre à jour le Quiz';
+            }
+        }
+
+        // Supprimer un quiz
+        async function deleteQuiz(quizId, quizTitle) {
+            if (!confirm(`Êtes-vous sûr de vouloir supprimer le quiz "${quizTitle}" ? Cette action est irréversible.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/quiz/${quizId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    showNotification('Quiz supprimé avec succès!');
+                    loadQuizList();
+                } else {
+                    const error = await response.json();
+                    showNotification(error.message || 'Erreur lors de la suppression', 'error');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('Erreur lors de la suppression', 'error');
+            }
+        }
+
+        // Dupliquer un quiz
+        async function duplicateQuiz(quizId) {
+            try {
+                const response = await fetch(`${API_BASE}/quiz/${quizId}`);
+                
+                if (response.ok) {
+                    const quiz = await response.json();
+                    
+                    // Créer une copie avec un nouveau titre
+                    const duplicatedQuiz = {
+                        ...quiz,
+                        id: `quiz_${Date.now()}`,
+                        title: `${quiz.title} (Copie)`,
+                        questions: quiz.questions.map(q => ({
+                            ...q,
+                            id: `q_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+                        }))
+                    };
+
+                    const createResponse = await fetch(`${API_BASE}/quiz`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(duplicatedQuiz)
+                    });
+
+                    if (createResponse.ok) {
+                        showNotification('Quiz dupliqué avec succès!');
+                        loadQuizList();
+                    } else {
+                        showNotification('Erreur lors de la duplication', 'error');
+                    }
+                } else {
+                    showNotification('Erreur lors du chargement du quiz à dupliquer', 'error');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('Erreur lors de la duplication', 'error');
+            }
+        }
+
+        // Vider le formulaire de quiz
+        function clearQuizForm() {
+            document.getElementById('quiz-form').reset();
+            document.getElementById('questions-container').innerHTML = `
+                <p style="text-align: center; color: #718096; margin: 50px 0;">
+                    Aucune question ajoutée. Cliquez sur "Ajouter une Question" pour commencer.
+                </p>
+            `;
+            questionCounter = 0;
+            
+            // Restaurer le comportement normal du formulaire
+            document.getElementById('quiz-form').onsubmit = handleQuizSubmit;
+            document.getElementById('save-quiz-btn').textContent = '💾 Enregistrer le Quiz';
+        }
+
+        // Vider le formulaire d'exercice
+        function clearExerciseForm() {
+            document.getElementById('exercise-form').reset();
+            document.getElementById('exercise-items-container').innerHTML = `
+                <p style="text-align: center; color: #718096; margin: 50px 0;">
+                    Aucun élément ajouté. Cliquez sur "Ajouter un Élément" pour commencer.
+                </p>
+            `;
+            exerciseItemCounter = 0;
+        }
+
+        // Obtenir la couleur selon la catégorie
+        function getCategoryColor(category) {
+            const colors = {
+                'language': '#48bb78',
+                'history': '#9f7aea',
+                'culture': '#ed8936',
+                'geography': '#38b2ac'
+            };
+            return colors[category] || '#667eea';
+        }
+
+        // Obtenir la couleur selon le type d'exercice
+        function getExerciseTypeColor(type) {
+            const colors = {
+                'pronunciation': '#9f7aea',
+                'translation': '#ed8936',
+                'listening': '#38b2ac',
+                'writing': '#4299e1',
+                'conversation': '#48bb78'
+            };
+            return colors[type] || '#667eea';
+        }
+
+        // Fonction debounce pour la recherche
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+         // Fonction pour afficher les notifications
+        function showNotification(message, type) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type}`;
+            notification.classList.add('show');
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
