@@ -369,17 +369,31 @@
         const API_BASE_URL = window.location.origin;
 
         // Vérifier si l'utilisateur est déjà connecté
-        window.addEventListener('load', function() {
-            const token = localStorage.getItem('admin_token');
-            const expirationTime = localStorage.getItem('token_expiration');
-            
-            if (token && expirationTime && Date.now() < parseInt(expirationTime)) {
-                // Token valide, rediriger vers le dashboard
-                window.location.href = '/';
-            }
-            
-            checkLockoutStatus();
-        });
+        // Vérifier si l'utilisateur est déjà connecté
+window.addEventListener('load', function() {
+  const token = localStorage.getItem('admin_token');
+  const userData = localStorage.getItem('admin_user');
+  
+  if (token && userData) {
+    // Vérifier rapidement le token sans attendre la réponse du serveur
+    // pour éviter les délais de chargement
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const expirationTime = payload.exp * 1000;
+      
+      if (Date.now() < expirationTime) {
+        // Token semble valide, rediriger
+        window.location.href = '/';
+        return;
+      }
+    } catch (e) {
+      // Token invalide, rester sur la page de login
+      console.log('Token invalide, affichage du formulaire de connexion');
+    }
+  }
+  
+  checkLockoutStatus();
+});
 
         // Vérifier le statut de verrouillage
         function checkLockoutStatus() {
