@@ -313,6 +313,7 @@ const joinCommaSeparated = (arr) => {
 };
 
 // Middleware d'authentification
+// Middleware d'authentification corrigé
 async function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -327,21 +328,16 @@ async function authenticateToken(req, res, next) {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     
-    // Vérifier si la session existe toujours
-    const sessionQuery = `
-      SELECT s.*, u.username, u.is_active, u.role 
-      FROM admin_sessions s 
-      JOIN admin_users u ON s.user_id = u.id 
-      WHERE s.user_id = $1 AND s.expires_at > $2 AND u.is_active = TRUE 
-      ORDER BY s.created_at DESC LIMIT 1
-    `;
+    // Vérifier si l'utilisateur existe toujours
+    const userResult = await pool.query(
+      'SELECT id, username, role, is_active FROM admin_users WHERE id = $1 AND is_active = TRUE',
+      [decoded.userId]
+    );
     
-    const sessionResult = await pool.query(sessionQuery, [decoded.userId, Math.floor(Date.now() / 1000)]);
-
-    if (sessionResult.rows.length === 0) {
+    if (userResult.rows.length === 0) {
       return res.status(401).json({ 
-        error: 'Session expirée ou invalide',
-        code: 'INVALID_SESSION'
+        error: 'Utilisateur non trouvé ou désactivé',
+        code: 'USER_NOT_FOUND'
       });
     }
 
@@ -350,7 +346,7 @@ async function authenticateToken(req, res, next) {
       username: decoded.username,
       role: decoded.role
     };
-    req.session = sessionResult.rows[0];
+    
     next();
   } catch (error) {
     if (error.name === 'TokenExpiredError') {
@@ -973,23 +969,54 @@ app.delete('/api/exercise/:id', authenticateToken, async (req, res) => {
 });
 
 // Middleware d'authentification (doit être défini ailleurs dans votre application)
-function authenticateToken(req, res, next) {
+// Middleware d'authentification corrigé
+async function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
-    return res.status(401).json({ error: 'Token d\'accès requis' });
+    return res.status(401).json({ 
+      error: 'Token d\'accès requis',
+      code: 'MISSING_TOKEN'
+    });
   }
 
-  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ error: 'Token invalide' });
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Vérifier si l'utilisateur existe toujours
+    const userResult = await pool.query(
+      'SELECT id, username, role, is_active FROM admin_users WHERE id = $1 AND is_active = TRUE',
+      [decoded.userId]
+    );
+    
+    if (userResult.rows.length === 0) {
+      return res.status(401).json({ 
+        error: 'Utilisateur non trouvé ou désactivé',
+        code: 'USER_NOT_FOUND'
+      });
     }
-    req.user = user;
-    next();
-  });
-}
 
+    req.user = {
+      userId: decoded.userId,
+      username: decoded.username,
+      role: decoded.role
+    };
+    
+    next();
+  } catch (error) {
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ 
+        error: 'Token expiré',
+        code: 'TOKEN_EXPIRED'
+      });
+    }
+    return res.status(401).json({ 
+      error: 'Token invalide',
+      code: 'INVALID_TOKEN'
+    });
+  }
+}
 // GET /api/auth/verify - Vérifier un token
 app.get('/api/auth/verify', authenticateToken, (req, res) => {
   res.json({
@@ -998,7 +1025,6 @@ app.get('/api/auth/verify', authenticateToken, (req, res) => {
     user: req.user
   });
 });
-
 // POST /api/auth/logout - Déconnexion
 app.post('/api/auth/logout', authenticateToken, async (req, res) => {
   try {
