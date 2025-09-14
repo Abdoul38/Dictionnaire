@@ -21,6 +21,7 @@ const PORT = process.env.PORT || 3000;
 // Remplacer les imports en haut du fichier server.js
 const { pool, testConnection, healthCheck, handleDatabaseError, queryWithRetry } = require('./db-config');
 
+
 // Middleware de gestion d'erreurs (à ajouter après les routes)
 app.use(handleDatabaseError);
 
@@ -698,7 +699,7 @@ app.put('/api/quiz/:id', async (req, res) => {
     await client.query(`
       UPDATE quizzes 
       SET title = $1, description = $2, category = $3, quiz_type = $4, 
-          difficulty = $5, time_limit = $6, primary_color = $7, updated_at = NOW()
+          difficulty = $5, time_limit = $6, primary_color = $7
       WHERE id = $8
     `, [title, description, category, quizType, difficulty, timeLimit, primaryColor, id]);
     
@@ -924,7 +925,7 @@ app.put('/api/exercise/:id', async (req, res) => {
     // Mettre à jour l'exercice
     await client.query(`
       UPDATE exercises 
-      SET title = $1, description = $2, exercise_type = $3, primary_color = $4, updated_at = NOW()
+      SET title = $1, description = $2, exercise_type = $3, primary_color = $4
       WHERE id = $5
     `, [title, description, type, primaryColor, id]);
     
@@ -1413,6 +1414,7 @@ app.get('/api/export', async (req, res) => {
     res.status(500).json({ error: 'Erreur lors de l\'export des données: ' + error.message });
   }
 });
+
 
 // POST /api/import - Import des données (CORRIGÉ)
 // POST /api/import - Import des données (MODIFIÉ pour accepter les doublons)
