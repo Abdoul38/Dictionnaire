@@ -53,37 +53,183 @@ async function startConnectionMonitoring() {
 }
 // Initialiser WebSocket Server
 function initializeWebSocket(server) {
-  wss = new WebSocket.Server({ server, path: '/api/ws' });
+  console.log('🔄 Initialisation du WebSocket Server...');
   
-  wss.on('connection', (ws, req) => {
-    const clientId = uuidv4();
-    connectedClients.set(clientId, ws);
-    console.log(`🔗 Client WebSocket connecté: ${clientId} (Total: ${connectedClients.size})`);
-    
-    ws.on('message', (message) => {
-      try {
-        const data = JSON.parse(message);
-        if (data.type === 'ping') {
-          ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
-        }
-      } catch (error) {
-        console.error('Erreur parsing message WebSocket:', error);
+  // CORRECTION: Vérifier que le serveur HTTP est prêt
+  if (!server || !server.listening) {
+    console.error('❌ Serveur HTTP non prêt pour WebSocket');
+    return;
+  }
+  
+  try {
+    wss = new WebSocket.Server({ 
+      server, 
+      path: '/api/ws',
+      // CORRECTION: Ajouter des options pour la stabilité
+      perMessageDeflate: false,
+      maxPayload: 64 * 1024, // 64KB max
+      clientTracking: true,
+      verifyClient: (info) => {
+        const origin = info.req.headers.origin;
+        const userAgent = info.req.headers['user-agent'] || '';
+        
+        console.log(`🔍 Nouvelle connexion WebSocket:
+        - Origin: ${origin}
+        - IP: ${info.req.connection.remoteAddress}
+        - User-Agent: ${userAgent.substring(0, 100)}...`);
+        
+        return true; // Accepter toutes les connexions
       }
     });
     
-    ws.on('close', () => {
-      connectedClients.delete(clientId);
-      console.log(`🔌 Client WebSocket déconnecté: ${clientId} (Total: ${connectedClients.size})`);
+    // CORRECTION: Gérer les événements du serveur WebSocket
+    wss.on('error', (error) => {
+      console.error('❌ Erreur WebSocket Server:', error);
     });
     
-    ws.on('error', (error) => {
-      console.error('Erreur WebSocket:', error);
-      connectedClients.delete(clientId);
+    wss.on('connection', (ws, req) => {
+      const clientId = uuidv4();
+      const clientIP = req.headers['x-forwarded-for'] || 
+                       req.headers['x-real-ip'] || 
+                       req.connection.remoteAddress ||
+                       req.socket.remoteAddress;
+      
+      // CORRECTION: Ajouter plus d'informations sur le client
+      const clientInfo = {
+        id: clientId,
+        ip: clientIP,
+        userAgent: req.headers['user-agent'] || 'Unknown',
+        connectedAt: new Date(),
+        lastPing: new Date(),
+        isAlive: true
+      };
+      
+      connectedClients.set(clientId, { ws, info: clientInfo });
+      
+      console.log(`🔗 Client WebSocket connecté:
+      - ID: ${clientId}
+      - IP: ${clientIP}
+      - Total clients: ${connectedClients.size}`);
+      
+      // CORRECTION: Envoyer immédiatement le message de bienvenue
+      try {
+        ws.send(JSON.stringify({
+          type: 'welcome',
+          message: 'Connexion WebSocket établie avec succès',
+          clientId: clientId,
+          serverTime: Date.now(),
+          timestamp: Date.now()
+        }));
+        
+        console.log(`✅ Message de bienvenue envoyé à ${clientId}`);
+        
+        // Envoyer les notifications existantes après un petit délai
+        setTimeout(() => {
+          sendExistingNotificationsToClient(ws, clientId);
+        }, 1000);
+        
+      } catch (error) {
+        console.error(`❌ Erreur envoi bienvenue à ${clientId}:`, error);
+      }
+      
+      // CORRECTION: Gérer les messages avec plus de robustesse
+      ws.on('message', (message) => {
+        try {
+          clientInfo.lastPing = new Date();
+          clientInfo.isAlive = true;
+          
+          const data = JSON.parse(message.toString());
+          console.log(`📨 Message de ${clientId}:`, data);
+          
+          switch (data.type) {
+            case 'ping':
+              // Répondre immédiatement au ping
+              ws.send(JSON.stringify({ 
+                type: 'pong', 
+                timestamp: Date.now(),
+                clientId: clientId
+              }));
+              console.log(`🏓 Pong envoyé à ${clientId}`);
+              break;
+              
+            case 'heartbeat':
+              // Heartbeat pour maintenir la connexion
+              ws.send(JSON.stringify({
+                type: 'heartbeat_ack',
+                timestamp: Date.now()
+              }));
+              break;
+              
+            default:
+              console.log(`❓ Message inconnu de ${clientId}:`, data.type);
+          }
+          
+        } catch (error) {
+          console.error(`❌ Erreur parsing message de ${clientId}:`, error);
+        }
+      });
+      
+      // CORRECTION: Détecter les connexions mortes
+      ws.on('pong', () => {
+        clientInfo.isAlive = true;
+        clientInfo.lastPing = new Date();
+        console.log(`💓 Pong reçu de ${clientId}`);
+      });
+      
+      ws.on('close', (code, reason) => {
+        connectedClients.delete(clientId);
+        console.log(`🔌 Client ${clientId} déconnecté:
+        - Code: ${code}
+        - Raison: ${reason}
+        - Total clients: ${connectedClients.size}`);
+      });
+      
+      ws.on('error', (error) => {
+        console.error(`❌ Erreur WebSocket client ${clientId}:`, error);
+        connectedClients.delete(clientId);
+      });
     });
-  });
-  
-  console.log('✅ WebSocket Server initialisé');
+    
+    // CORRECTION: Ajouter un système de nettoyage des connexions mortes
+    const heartbeatInterval = setInterval(() => {
+      connectedClients.forEach(({ ws, info }, clientId) => {
+        if (!info.isAlive) {
+          console.log(`💀 Connexion morte détectée: ${clientId}`);
+          ws.terminate();
+          connectedClients.delete(clientId);
+          return;
+        }
+        
+        // Marquer comme potentiellement mort
+        info.isAlive = false;
+        
+        // Envoyer un ping
+        try {
+          ws.ping();
+        } catch (error) {
+          console.error(`❌ Erreur ping vers ${clientId}:`, error);
+          connectedClients.delete(clientId);
+        }
+      });
+    }, 30000); // Toutes les 30 secondes
+    
+    // Nettoyer l'intervalle à l'arrêt
+    process.on('SIGTERM', () => clearInterval(heartbeatInterval));
+    process.on('SIGINT', () => clearInterval(heartbeatInterval));
+    
+    console.log('✅ WebSocket Server initialisé sur /api/ws');
+    console.log(`📊 Configuration:
+    - Path: /api/ws
+    - Max payload: 64KB
+    - Heartbeat: 30s
+    - Client tracking: activé`);
+    
+  } catch (error) {
+    console.error('❌ Erreur initialisation WebSocket Server:', error);
+    throw error;
+  }
 }
+
 function broadcastNotification(notification) {
   if (!wss) {
     console.log('❌ WebSocket Server non initialisé');
@@ -92,32 +238,52 @@ function broadcastNotification(notification) {
   
   const message = JSON.stringify({
     type: 'notification',
-    data: notification,
-    timestamp: Date.now()
+    data: {
+      ...notification,
+      timestamp: notification.timestamp || Date.now()
+    },
+    serverTime: Date.now()
   });
   
   let sentCount = 0;
+  let errorCount = 0;
+  const deadConnections = [];
   
-  connectedClients.forEach((ws, clientId) => {
+  console.log(`📢 Diffusion notification "${notification.title}" à ${connectedClients.size} clients`);
+  
+  connectedClients.forEach(({ ws, info }, clientId) => {
     if (ws.readyState === WebSocket.OPEN) {
       try {
         ws.send(message);
         sentCount++;
-        console.log(`📢 Notification envoyée au client ${clientId}`);
+        console.log(`✅ Notification envoyée à ${clientId} (${info.ip})`);
       } catch (error) {
-        console.error(`Erreur envoi WebSocket au client ${clientId}:`, error);
-        connectedClients.delete(clientId);
+        console.error(`❌ Erreur envoi à ${clientId}:`, error);
+        deadConnections.push(clientId);
+        errorCount++;
       }
     } else {
-      // Nettoyer les connexions fermées
-      connectedClients.delete(clientId);
+      console.log(`⚠️ Client ${clientId} dans état ${ws.readyState}, suppression`);
+      deadConnections.push(clientId);
     }
   });
   
-  console.log(`📡 Notification "${notification.title}" diffusée à ${sentCount}/${connectedClients.size} clients`);
+  // Nettoyer les connexions mortes
+  deadConnections.forEach(clientId => {
+    connectedClients.delete(clientId);
+  });
+  
+  const result = {
+    sent: sentCount,
+    errors: errorCount,
+    totalClients: connectedClients.size,
+    notification: notification.title
+  };
+  
+  console.log(`📊 Résultat diffusion:`, result);
+  
   return sentCount;
 }
-
 app.get('/api/websocket/status', (req, res) => {
   res.json({
     wsServerActive: !!wss,
@@ -263,80 +429,30 @@ app.post('/api/test-notification', async (req, res) => {
   }
 });
 
-// 5. Vérifier que WebSocket est correctement initialisé
-function initializeWebSocket(server) {
-  console.log('🔄 Initialisation du WebSocket Server...');
-  
-  wss = new WebSocket.Server({ 
-    server, 
-    path: '/api/ws',
-    verifyClient: (info) => {
-      console.log('📡 Nouvelle connexion WebSocket depuis:', info.req.headers.origin || info.req.connection.remoteAddress);
-      return true;
-    }
-  });
-  
-  wss.on('connection', (ws, req) => {
-    const clientId = uuidv4();
-    const clientIP = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-    
-    connectedClients.set(clientId, ws);
-    console.log(`🔗 Client WebSocket connecté: ${clientId} depuis ${clientIP} (Total: ${connectedClients.size})`);
-    
-    // Envoyer un message de bienvenue immédiatement
-    ws.send(JSON.stringify({
-      type: 'welcome',
-      message: 'Connexion WebSocket établie avec succès',
-      clientId: clientId,
-      timestamp: Date.now()
-    }));
-    
-    // Envoyer les notifications existantes au nouveau client
-    sendExistingNotificationsToClient(ws);
-    
-    ws.on('message', (message) => {
-      try {
-        const data = JSON.parse(message);
-        console.log('📨 Message reçu de', clientId, ':', data);
-        
-        if (data.type === 'ping') {
-          ws.send(JSON.stringify({ 
-            type: 'pong', 
-            timestamp: Date.now() 
-          }));
-          console.log('🏓 Pong envoyé à', clientId);
-        }
-      } catch (error) {
-        console.error('Erreur parsing message WebSocket:', error);
-      }
-    });
-    
-    ws.on('close', () => {
-      connectedClients.delete(clientId);
-      console.log(`📌 Client WebSocket déconnecté: ${clientId} (Total: ${connectedClients.size})`);
-    });
-    
-    ws.on('error', (error) => {
-      console.error('Erreur WebSocket pour', clientId, ':', error);
-      connectedClients.delete(clientId);
-    });
-  });
-  
-  console.log('✅ WebSocket Server initialisé sur /api/ws');
-}
 
-async function sendExistingNotificationsToClient(ws) {
+async function sendExistingNotificationsToClient(ws, clientId) {
   try {
+    console.log(`📬 Envoi notifications historiques à ${clientId}`);
+    
     const result = await pool.query(`
       SELECT *, 
-             created_at * 1000 as timestamp
+             created_at * 1000 as timestamp,
+             expires_at * 1000 as expires_at_ms
       FROM notifications 
       WHERE expires_at > $1 
       ORDER BY created_at DESC 
-      LIMIT 10
+      LIMIT 5
     `, [Math.floor(Date.now() / 1000)]);
     
-    result.rows.forEach(row => {
+    if (result.rows.length === 0) {
+      console.log(`📭 Aucune notification historique pour ${clientId}`);
+      return;
+    }
+    
+    // Envoyer chaque notification avec un petit délai
+    for (let i = 0; i < result.rows.length; i++) {
+      const row = result.rows[i];
+      
       const notification = {
         id: row.id,
         title: row.title,
@@ -346,21 +462,68 @@ async function sendExistingNotificationsToClient(ws) {
         target: row.target,
         createdBy: row.created_by,
         timestamp: row.timestamp,
-        createdAt: row.created_at
+        expiresAt: row.expires_at_ms,
+        isHistorical: true
       };
       
-      ws.send(JSON.stringify({
-        type: 'notification',
-        data: notification,
-        timestamp: Date.now()
-      }));
-    });
+      try {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'notification',
+            data: notification,
+            serverTime: Date.now()
+          }));
+          
+          console.log(`📨 Notification historique #${i+1} envoyée à ${clientId}: "${notification.title}"`);
+          
+          // Petit délai entre les envois
+          if (i < result.rows.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
+        } else {
+          console.log(`⚠️ Client ${clientId} déconnecté pendant l'envoi historique`);
+          break;
+        }
+      } catch (error) {
+        console.error(`❌ Erreur envoi notification historique à ${clientId}:`, error);
+        break;
+      }
+    }
     
-    console.log(`📬 ${result.rows.length} notifications historiques envoyées au nouveau client`);
+    console.log(`✅ ${result.rows.length} notifications historiques envoyées à ${clientId}`);
+    
   } catch (error) {
-    console.error('Erreur envoi notifications historiques:', error);
+    console.error(`❌ Erreur chargement notifications historiques pour ${clientId}:`, error);
   }
 }
+app.get('/api/websocket/diagnostic', (req, res) => {
+  const diagnostics = {
+    server: {
+      initialized: !!wss,
+      listening: wss ? wss.address() : null,
+      clientCount: connectedClients.size
+    },
+    clients: []
+  };
+  
+  if (connectedClients.size > 0) {
+    connectedClients.forEach(({ ws, info }, clientId) => {
+      diagnostics.clients.push({
+        id: clientId.substring(0, 8) + '...',
+        ip: info.ip,
+        state: ws.readyState,
+        stateText: ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][ws.readyState],
+        connectedAt: info.connectedAt,
+        lastPing: info.lastPing,
+        isAlive: info.isAlive,
+        userAgent: info.userAgent.substring(0, 50) + '...'
+      });
+    });
+  }
+  
+  res.json(diagnostics);
+});
+
 
 // Récupérer l'historique des notifications
 app.get('/api/notifications', async (req, res) => {
@@ -533,20 +696,27 @@ async function startServer() {
     // Initialiser la base de données
     await initializeDatabase();
     
-    // Démarrer le serveur HTTP
-    const server = app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Serveur API Dictionnaire Zarma (PostgreSQL) démarré sur le port ${PORT}`);
-      console.log(`🔗 API disponible sur: http://localhost:${PORT}/api`);
-      console.log(`🔒 Authentification requise pour les routes d'administration`);
-      console.log(`💾 Base de données: PostgreSQL`);
-      console.log(`🌍 Environnement: ${process.env.NODE_ENV || 'production'}`);
-    });
-
-    // CORRECTION: Initialiser WebSocket APRÈS la création du serveur
-    initializeWebSocket(server);
-    
     // Démarrer la surveillance de la connexion DB
     await startConnectionMonitoring();
+    
+    // Démarrer le serveur HTTP
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Serveur API Dictionnaire Zarma démarré sur le port ${PORT}`);
+      console.log(`🔗 API disponible sur: https://dictionnaire-zarma-api.onrender.com/api`);
+      console.log(`🔒 Authentification requise pour les routes d'administration`);
+      console.log(`💾 Base de données: PostgreSQL`);
+      console.log(`🌐 Environnement: ${process.env.NODE_ENV || 'production'}`);
+    });
+
+    // CORRECTION: Attendre que le serveur soit prêt avant d'initialiser WebSocket
+    server.on('listening', () => {
+      console.log('🎧 Serveur HTTP en écoute - Initialisation WebSocket...');
+      try {
+        initializeWebSocket(server);
+      } catch (error) {
+        console.error('❌ Erreur initialisation WebSocket:', error);
+      }
+    });
     
     // Gestion de l'arrêt propre du serveur
     const gracefulShutdown = async (signal) => {
@@ -554,13 +724,31 @@ async function startServer() {
       
       // Fermer les connexions WebSocket
       if (wss) {
-        wss.clients.forEach(client => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.close();
+        console.log('🔄 Fermeture des connexions WebSocket...');
+        
+        // Notifier les clients de la fermeture
+        const closeMessage = JSON.stringify({
+          type: 'server_shutdown',
+          message: 'Serveur en cours d\'arrêt',
+          timestamp: Date.now()
+        });
+        
+        connectedClients.forEach(({ ws }, clientId) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            try {
+              ws.send(closeMessage);
+            } catch (error) {
+              console.error(`Erreur notification fermeture ${clientId}:`, error);
+            }
           }
         });
-        wss.close();
-        console.log('📡 WebSocket Server fermé');
+        
+        // Attendre un peu pour que les messages soient envoyés
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        wss.close(() => {
+          console.log('🔌 WebSocket Server fermé');
+        });
       }
       
       server.close(async () => {
