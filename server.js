@@ -1,5 +1,9 @@
 // server.js - Version corrigée pour Render.com avec PostgreSQL
 require('dotenv').config();
+const WebSocket = require('ws');
+const { v4: uuidv4 } = require('uuid');
+let wss = null;
+const connectedClients = new Map();
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -24,7 +28,9 @@ const { pool, testConnection, healthCheck, handleDatabaseError, queryWithRetry }
 
 // Middleware de gestion d'erreurs (à ajouter après les routes)
 app.use(handleDatabaseError);
-
+// Middleware de parsing
+app.use(express.json({ limit: '10mb' }));
+app.use(express.static('public'));
 // Fonction de surveillance de la connexion
 async function startConnectionMonitoring() {
   console.log('🔍 Démarrage de la surveillance de la connexion PostgreSQL...');
@@ -45,7 +51,314 @@ async function startConnectionMonitoring() {
   process.on('SIGTERM', () => clearInterval(monitorInterval));
   process.on('SIGINT', () => clearInterval(monitorInterval));
 }
+// Initialiser WebSocket Server
+function initializeWebSocket(server) {
+  wss = new WebSocket.Server({ server, path: '/api/ws' });
+  
+  wss.on('connection', (ws, req) => {
+    const clientId = uuidv4();
+    connectedClients.set(clientId, ws);
+    console.log(`🔗 Client WebSocket connecté: ${clientId} (Total: ${connectedClients.size})`);
+    
+    ws.on('message', (message) => {
+      try {
+        const data = JSON.parse(message);
+        if (data.type === 'ping') {
+          ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
+        }
+      } catch (error) {
+        console.error('Erreur parsing message WebSocket:', error);
+      }
+    });
+    
+    ws.on('close', () => {
+      connectedClients.delete(clientId);
+      console.log(`🔌 Client WebSocket déconnecté: ${clientId} (Total: ${connectedClients.size})`);
+    });
+    
+    ws.on('error', (error) => {
+      console.error('Erreur WebSocket:', error);
+      connectedClients.delete(clientId);
+    });
+  });
+  
+  console.log('✅ WebSocket Server initialisé');
+}
+function broadcastNotification(notification) {
+  if (!wss) {
+    console.log('WebSocket Server non initialisé');
+    return 0;
+  }
+  
+  const message = JSON.stringify({
+    type: 'notification',
+    data: notification,
+    timestamp: Date.now()
+  });
+  
+  let sentCount = 0;
+  
+  wss.clients.forEach((ws) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(message);
+        sentCount++;
+      } catch (error) {
+        console.error('Erreur envoi WebSocket:', error);
+      }
+    }
+  });
+  
+  console.log(`📢 Notification diffusée à ${sentCount} clients: ${notification.title}`);
+  return sentCount;
+}
 
+
+// Routes pour les notifications administrateur
+// Corrections pour les notifications dans server.js
+
+// 1. Corriger la route de création de notifications
+app.post('/api/admin/notifications', authenticateToken, async (req, res) => {
+  try {
+    // Vérifier le corps de la requête
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(400).json({ error: 'Corps de la requête manquant' });
+    }
+    
+    const { title, message, type, priority, target, expiresAt } = req.body;
+    
+    // Validation
+    if (!title || !message) {
+      return res.status(400).json({ error: 'Titre et message requis' });
+    }
+    
+    // Vérifier l'authentification
+    if (!req.user || !req.user.username) {
+      return res.status(401).json({ error: 'Utilisateur non authentifié' });
+    }
+    
+    const notification = {
+      id: uuidv4(), // Assurer que uuid est disponible
+      title,
+      message,
+      type: type || 'info',
+      priority: priority || 'normal',
+      target: target || 'all',
+      createdAt: Date.now(), // Utiliser timestamp en millisecondes pour le WebSocket
+      expiresAt: expiresAt || (Date.now() + (7 * 24 * 60 * 60 * 1000)), // 7 jours en ms
+      createdBy: req.user.username
+    };
+    
+    // Sauvegarder dans la base (convertir en secondes pour PostgreSQL)
+    await pool.query(`
+      INSERT INTO notifications (id, title, message, type, priority, target, created_by, created_at, expires_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `, [
+      notification.id,
+      notification.title,
+      notification.message,
+      notification.type,
+      notification.priority,
+      notification.target,
+      notification.createdBy,
+      Math.floor(notification.createdAt / 1000), // Convertir en secondes pour DB
+      Math.floor(notification.expiresAt / 1000)  // Convertir en secondes pour DB
+    ]);
+    
+    // Diffuser en temps réel
+    const sentCount = broadcastNotification(notification);
+    
+    res.json({
+      success: true,
+      message: `Notification créée et diffusée à ${sentCount} clients`,
+      notification
+    });
+    
+  } catch (error) {
+    console.error('Erreur création notification:', error);
+    res.status(500).json({ 
+      error: 'Erreur lors de la création de la notification',
+      details: error.message 
+    });
+  }
+});
+
+// 2. Corriger la route de récupération des notifications
+app.get('/api/notifications', async (req, res) => {
+  const { limit = 20, offset = 0 } = req.query;
+  
+  try {
+    const result = await pool.query(`
+      SELECT *, 
+             created_at * 1000 as timestamp,  -- Convertir en millisecondes
+             expires_at * 1000 as expires_at_ms
+      FROM notifications 
+      WHERE expires_at > $1 
+      ORDER BY created_at DESC 
+      LIMIT $2 OFFSET $3
+    `, [Math.floor(Date.now() / 1000), parseInt(limit), parseInt(offset)]);
+    
+    const notifications = result.rows.map(row => ({
+      id: row.id,
+      title: row.title,
+      message: row.message,
+      type: row.type,
+      priority: row.priority,
+      target: row.target,
+      createdBy: row.created_by,
+      timestamp: row.timestamp, // En millisecondes pour le client
+      expiresAt: row.expires_at_ms,
+      createdAt: row.created_at
+    }));
+    
+    res.json({ 
+      notifications,
+      total: notifications.length 
+    });
+  } catch (error) {
+    console.error('Erreur récupération notifications:', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération des notifications' });
+  }
+});
+
+// 3. Améliorer la fonction de diffusion WebSocket
+
+// 4. Route pour tester les notifications
+app.post('/api/test-notification', async (req, res) => {
+  try {
+    const testNotification = {
+      id: uuidv4(),
+      title: 'Test Notification',
+      message: 'Ceci est une notification de test',
+      type: 'info',
+      priority: 'normal',
+      target: 'all',
+      createdAt: Date.now(),
+      expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24h
+      createdBy: 'system'
+    };
+    
+    const sentCount = broadcastNotification(testNotification);
+    
+    res.json({
+      success: true,
+      message: `Notification de test envoyée à ${sentCount} clients`,
+      notification: testNotification
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 5. Vérifier que WebSocket est correctement initialisé
+function initializeWebSocket(server) {
+  wss = new WebSocket.Server({ 
+    server, 
+    path: '/api/ws',
+    verifyClient: (info) => {
+      console.log('Nouvelle connexion WebSocket depuis:', info.req.headers.origin);
+      return true; // Accepter toutes les connexions pour le test
+    }
+  });
+  
+  wss.on('connection', (ws, req) => {
+    const clientId = uuidv4();
+    const clientIP = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    
+    console.log(`🔗 Client WebSocket connecté: ${clientId} depuis ${clientIP}`);
+    
+    // Envoyer un message de bienvenue
+    ws.send(JSON.stringify({
+      type: 'welcome',
+      message: 'Connexion WebSocket établie',
+      clientId: clientId,
+      timestamp: Date.now()
+    }));
+    
+    ws.on('message', (message) => {
+      try {
+        const data = JSON.parse(message);
+        console.log('📨 Message reçu:', data);
+        
+        if (data.type === 'ping') {
+          ws.send(JSON.stringify({ 
+            type: 'pong', 
+            timestamp: Date.now() 
+          }));
+        }
+      } catch (error) {
+        console.error('Erreur parsing message WebSocket:', error);
+      }
+    });
+    
+    ws.on('close', () => {
+      console.log(`🔌 Client WebSocket déconnecté: ${clientId}`);
+    });
+    
+    ws.on('error', (error) => {
+      console.error('Erreur WebSocket:', error);
+    });
+  });
+  
+  console.log('✅ WebSocket Server initialisé sur /api/ws');
+}
+
+// Récupérer l'historique des notifications
+app.get('/api/notifications', async (req, res) => {
+  const { limit = 20, offset = 0 } = req.query;
+  
+  try {
+    const result = await pool.query(`
+      SELECT * FROM notifications 
+      WHERE expires_at > $1 
+      ORDER BY created_at DESC 
+      LIMIT $2 OFFSET $3
+    `, [Math.floor(Date.now() / 1000), parseInt(limit), parseInt(offset)]);
+    
+    res.json({ notifications: result.rows });
+  } catch (error) {
+    console.error('Erreur récupération notifications:', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération des notifications' });
+  }
+});
+
+// Marquer une notification comme lue
+app.post('/api/notifications/:id/read', async (req, res) => {
+  const { id } = req.params;
+  const { deviceId } = req.body;
+  
+  try {
+    await pool.query(`
+      INSERT INTO notification_reads (notification_id, device_id, read_at)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (notification_id, device_id) DO NOTHING
+    `, [id, deviceId || 'unknown', Math.floor(Date.now() / 1000)]);
+    
+    res.json({ success: true, message: 'Notification marquée comme lue' });
+  } catch (error) {
+    console.error('Erreur marquage notification:', error);
+    res.status(500).json({ error: 'Erreur lors du marquage de la notification' });
+  }
+});
+
+// Stats des notifications
+app.get('/api/admin/notifications/stats', async (req, res) => {
+  try {
+    const totalResult = await pool.query('SELECT COUNT(*) FROM notifications');
+    const activeResult = await pool.query('SELECT COUNT(*) FROM notifications WHERE expires_at > $1', 
+      [Math.floor(Date.now() / 1000)]);
+    const readsResult = await pool.query('SELECT COUNT(DISTINCT device_id) FROM notification_reads');
+    
+    res.json({
+      total: parseInt(totalResult.rows[0].count),
+      active: parseInt(activeResult.rows[0].count),
+      uniqueDevices: parseInt(readsResult.rows[0].count)
+    });
+  } catch (error) {
+    console.error('Erreur stats notifications:', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération des statistiques' });
+  }
+});
 // Route de santé améliorée
 app.get('/health', async (req, res) => {
   try {
@@ -158,35 +471,37 @@ app.get('/api/words', async (req, res) => {
 // Fonction de démarrage du serveur mise à jour
 async function startServer() {
   try {
-    // Test initial de connexion
-    console.log('🔍 Test de connexion PostgreSQL...');
-    const connected = await testConnection();
-    
-    if (!connected) {
-      console.error('❌ Impossible de se connecter à PostgreSQL');
-      if (process.env.NODE_ENV !== 'production') {
-        process.exit(1);
-      }
-    }
-    
     // Initialiser la base de données
     await initializeDatabase();
     
-    // Démarrer la surveillance de connexion
-    startConnectionMonitoring();
-    
-    // Démarrer le serveur
+    // Démarrer le serveur HTTP
     const server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Serveur API Dictionnaire Zarma (PostgreSQL) démarré sur le port ${PORT}`);
       console.log(`🔗 API disponible sur: http://localhost:${PORT}/api`);
-      console.log(`🔍 Surveillance de DB activée`);
+      console.log(`🔐 Authentification requise pour les routes d'administration`);
+      console.log(`💾 Base de données: PostgreSQL`);
+      console.log(`🌍 Environnement: ${process.env.NODE_ENV || 'production'}`);
     });
 
+    // Initialiser WebSocket
+    initializeWebSocket(server);
+    
     // Gestion de l'arrêt propre du serveur
     const gracefulShutdown = async (signal) => {
       console.log(`\n${signal} reçu, arrêt propre du serveur...`);
+      
+      // Fermer les connexions WebSocket
+      if (wss) {
+        wss.clients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.close();
+          }
+        });
+        wss.close();
+      }
+      
       server.close(async () => {
-        console.log('🔴 Serveur HTTP fermé');
+        console.log('📴 Serveur HTTP fermé');
         try {
           await pool.end();
           console.log('✅ Connexions PostgreSQL fermées proprement');
@@ -249,9 +564,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Middleware de parsing
-app.use(express.json({ limit: '10mb' }));
-app.use(express.static('public'));
+
 
 // Créer le dossier uploads s'il n'existe pas
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -2152,6 +2465,35 @@ await pool.query(`
     created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())
   )
 `);
+// Tables pour les notifications
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS notifications(
+    id VARCHAR(255) PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    type VARCHAR(50) DEFAULT 'info',
+    priority VARCHAR(50) DEFAULT 'normal',
+    target VARCHAR(50) DEFAULT 'all',
+    created_by VARCHAR(255),
+    created_at BIGINT NOT NULL,
+    expires_at BIGINT NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE
+  )
+`);
+
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS notification_reads(
+    id SERIAL PRIMARY KEY,
+    notification_id VARCHAR(255) NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,
+    device_id VARCHAR(255) NOT NULL,
+    read_at BIGINT NOT NULL,
+    UNIQUE(notification_id, device_id)
+  )
+`);
+
+await pool.query('CREATE INDEX IF NOT EXISTS idx_notifications_expires ON notifications(expires_at)');
+await pool.query('CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at DESC)');
+await pool.query('CREATE INDEX IF NOT EXISTS idx_notification_reads_device ON notification_reads(device_id)');
 
 // Créer les index pour les nouvelles tables
 await pool.query('CREATE INDEX IF NOT EXISTS idx_quizzes_category ON quizzes(category)');
