@@ -406,7 +406,72 @@
             <button class="tab" data-tab="manage-words">Gérer les Mots</button>
             <button class="tab" data-tab="stats">Statistiques</button>
             <button class="tab" data-tab="export">Export/Import</button>
+            <button class="tab" data-tab="notifications">Notifications</button>
         </div>
+
+        <!-- Ajouter un nouvel onglet dans la section des tabs -->
+<button class="tab" data-tab="notifications">Notifications</button>
+
+<!-- Contenu de l'onglet Notifications -->
+<div id="notifications" class="tab-content">
+    <h2>Gestion des Notifications</h2>
+    
+    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+        <h3>Nouvelle Notification</h3>
+        <form id="notification-form">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="notification-title">Titre *</label>
+                    <input type="text" id="notification-title" required>
+                </div>
+                <div class="form-group">
+                    <label for="notification-type">Type</label>
+                    <select id="notification-type">
+                        <option value="info">Information</option>
+                        <option value="warning">Avertissement</option>
+                        <option value="error">Erreur</option>
+                        <option value="success">Succès</option>
+                        <option value="maintenance">Maintenance</option>
+                        <option value="update">Mise à jour</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="notification-priority">Priorité</label>
+                    <select id="notification-priority">
+                        <option value="low">Basse</option>
+                        <option value="normal" selected>Normale</option>
+                        <option value="high">Haute</option>
+                        <option value="urgent">Urgente</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="notification-target">Cible</label>
+                    <select id="notification-target">
+                        <option value="all">Tous les utilisateurs</option>
+                        <option value="mobile">App mobile seulement</option>
+                        <option value="web">Web seulement</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="notification-message">Message *</label>
+                <textarea id="notification-message" rows="4" required placeholder="Contenu de la notification..."></textarea>
+            </div>
+            
+            <div style="text-align: center; margin-top: 20px;">
+                <button type="submit" class="btn btn-primary">Envoyer la Notification</button>
+            </div>
+        </form>
+    </div>
+
+    <div>
+        <h3>Notifications Récentes</h3>
+        <div id="notifications-list" class="words-grid">
+            <!-- Les notifications seront chargées ici -->
+        </div>
+    </div>
+</div>
 
         <!-- Onglet Ajouter un Mot -->
         <div id="add-word" class="tab-content active">
@@ -723,12 +788,88 @@ async function authenticatedRequest(url, options = {}) {
                 
                 if (tabName === 'manage-words') {
                     loadWordsList();
-                } else if (tabName === 'stats') {
+                } 
+                if (tabName === 'notifications') {
+                        loadNotifications();
+                    }else if (tabName === 'stats') {
                     loadStats();
                 }
             }
         }
+       document.getElementById('notification-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const title = document.getElementById('notification-title').value;
+    const message = document.getElementById('notification-message').value;
+    const type = document.getElementById('notification-type').value;
+    const priority = document.getElementById('notification-priority').value;
+    const target = document.getElementById('notification-target').value;
+    
+    try {
+        const response = await authenticatedRequest(`${API_BASE}/admin/notifications`, {
+            method: 'POST',
+            body: JSON.stringify({ title, message, type, priority, target })
+        });
+        
+        if (response && response.ok) {
+            const result = await response.json();
+            showNotification('Notification envoyée avec succès!');
+            document.getElementById('notification-form').reset();
+            loadNotifications();
+        } else {
+            showNotification('Erreur lors de l\'envoi de la notification', 'error');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showNotification('Erreur lors de l\'envoi de la notification', 'error');
+    }
+});
 
+// Charger les notifications
+async function loadNotifications() {
+    const container = document.getElementById('notifications-list');
+    
+    try {
+        const response = await authenticatedRequest(`${API_BASE}/notifications?limit=10`);
+        
+        if (response && response.ok) {
+            const data = await response.json();
+            
+            container.innerHTML = data.notifications.map(notif => `
+                <div class="word-card">
+                    <div class="word-header">
+                        <div class="word-zarma">${notif.title}</div>
+                        <div class="word-category" style="background: ${getNotificationColor(notif.type)}">
+                            ${notif.type}
+                        </div>
+                    </div>
+                    <div class="word-meaning">${notif.message}</div>
+                    <div class="word-examples">
+                        <strong>Priorité:</strong> ${notif.priority}<br>
+                        <strong>Cible:</strong> ${notif.target}<br>
+                        <strong>Créé par:</strong> ${notif.created_by}<br>
+                        <strong>Date:</strong> ${new Date(notif.created_at * 1000).toLocaleString()}
+                    </div>
+                </div>
+            `).join('');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        container.innerHTML = '<div class="no-data">Erreur lors du chargement des notifications</div>';
+    }
+}
+
+function getNotificationColor(type) {
+    const colors = {
+        info: '#3498db',
+        warning: '#f39c12',
+        error: '#e74c3c',
+        success: '#2ecc71',
+        maintenance: '#9b59b6',
+        update: '#1abc9c'
+    };
+    return colors[type] || '#3498db';
+}
         // Mettre à jour les informations utilisateur
         function updateUserInfo() {
             if (currentUser) {
@@ -1195,6 +1336,8 @@ async function importData() {
         importBtn.textContent = originalText;
     }
 }
+
+
 
 // Fonction utilitaire pour télécharger un fichier exemple (BONUS)
 function downloadSampleFile(format) {
