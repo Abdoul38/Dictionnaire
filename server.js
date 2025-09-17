@@ -88,87 +88,81 @@ function initializeWebSocket(server) {
     });
     
     wss.on('connection', (ws, req) => {
-      const clientId = uuidv4();
-      const clientIP = req.headers['x-forwarded-for'] || 
-                       req.headers['x-real-ip'] || 
-                       req.connection.remoteAddress ||
-                       req.socket.remoteAddress;
+  const clientId = uuidv4();
+  const clientIP = req.headers['x-forwarded-for'] || 
+                   req.headers['x-real-ip'] || 
+                   req.connection.remoteAddress ||
+                   req.socket.remoteAddress;
+  
+  const clientInfo = {
+    id: clientId,
+    ip: clientIP,
+    userAgent: req.headers['user-agent'] || 'Unknown',
+    connectedAt: new Date(),
+    lastPing: new Date(),
+    isAlive: true
+  };
+  
+  connectedClients.set(clientId, { ws, info: clientInfo });
+  
+  console.log(`🔗 Client WebSocket connecté: ${clientId} (Total: ${connectedClients.size})`);
+  
+  // CORRECTION : Envoyer immédiatement le message de bienvenue
+  try {
+    ws.send(JSON.stringify({
+      type: 'welcome',
+      message: 'Connexion WebSocket établie avec succès',
+      clientId: clientId,
+      serverTime: Date.now(),
+      timestamp: Date.now()
+    }));
+    
+    console.log(`✅ Message de bienvenue envoyé à ${clientId}`);
+    
+  } catch (error) {
+    console.error(`❌ Erreur envoi bienvenue à ${clientId}:`, error);
+  }
+  
+  // CORRECTION : Gérer les messages avec plus de robustesse
+  ws.on('message', (message) => {
+    try {
+      clientInfo.lastPing = new Date();
+      clientInfo.isAlive = true;
       
-      // CORRECTION: Ajouter plus d'informations sur le client
-      const clientInfo = {
-        id: clientId,
-        ip: clientIP,
-        userAgent: req.headers['user-agent'] || 'Unknown',
-        connectedAt: new Date(),
-        lastPing: new Date(),
-        isAlive: true
-      };
+      const data = JSON.parse(message.toString());
+      console.log(`📨 Message de ${clientId}:`, data);
       
-      connectedClients.set(clientId, { ws, info: clientInfo });
-      
-      console.log(`🔗 Client WebSocket connecté:
-      - ID: ${clientId}
-      - IP: ${clientIP}
-      - Total clients: ${connectedClients.size}`);
-      
-      // CORRECTION: Envoyer immédiatement le message de bienvenue
-      try {
-        ws.send(JSON.stringify({
-          type: 'welcome',
-          message: 'Connexion WebSocket établie avec succès',
-          clientId: clientId,
-          serverTime: Date.now(),
-          timestamp: Date.now()
-        }));
-        
-        console.log(`✅ Message de bienvenue envoyé à ${clientId}`);
-        
-        // Envoyer les notifications existantes après un petit délai
-        setTimeout(() => {
+      switch (data.type) {
+        case 'ping':
+          ws.send(JSON.stringify({ 
+            type: 'pong', 
+            timestamp: Date.now(),
+            clientId: clientId
+          }));
+          console.log(`🏓 Pong envoyé à ${clientId}`);
+          break;
+          
+        case 'heartbeat':
+          ws.send(JSON.stringify({
+            type: 'heartbeat_ack',
+            timestamp: Date.now()
+          }));
+          break;
+          
+        case 'request_notifications':
+          // NOUVEAU : Répondre aux demandes de notifications
+          console.log(`📨 Demande de notifications de ${clientId}`);
           sendExistingNotificationsToClient(ws, clientId);
-        }, 1000);
-        
-      } catch (error) {
-        console.error(`❌ Erreur envoi bienvenue à ${clientId}:`, error);
+          break;
+          
+        default:
+          console.log(`❓ Message inconnu de ${clientId}:`, data.type);
       }
       
-      // CORRECTION: Gérer les messages avec plus de robustesse
-      ws.on('message', (message) => {
-        try {
-          clientInfo.lastPing = new Date();
-          clientInfo.isAlive = true;
-          
-          const data = JSON.parse(message.toString());
-          console.log(`📨 Message de ${clientId}:`, data);
-          
-          switch (data.type) {
-            case 'ping':
-              // Répondre immédiatement au ping
-              ws.send(JSON.stringify({ 
-                type: 'pong', 
-                timestamp: Date.now(),
-                clientId: clientId
-              }));
-              console.log(`🏓 Pong envoyé à ${clientId}`);
-              break;
-              
-            case 'heartbeat':
-              // Heartbeat pour maintenir la connexion
-              ws.send(JSON.stringify({
-                type: 'heartbeat_ack',
-                timestamp: Date.now()
-              }));
-              break;
-              
-            default:
-              console.log(`❓ Message inconnu de ${clientId}:`, data.type);
-          }
-          
-        } catch (error) {
-          console.error(`❌ Erreur parsing message de ${clientId}:`, error);
-        }
-      });
-      
+    } catch (error) {
+      console.error(`❌ Erreur parsing message de ${clientId}:`, error);
+    }
+  });
       // CORRECTION: Détecter les connexions mortes
       ws.on('pong', () => {
         clientInfo.isAlive = true;
@@ -240,7 +234,8 @@ function broadcastNotification(notification) {
     type: 'notification',
     data: {
       ...notification,
-      timestamp: notification.timestamp || Date.now()
+      timestamp: notification.timestamp || Date.now(),
+      isHistorical: false // Nouvelle notification
     },
     serverTime: Date.now()
   });
@@ -284,6 +279,107 @@ function broadcastNotification(notification) {
   
   return sentCount;
 }
+
+app.get('/api/notifications-diagnostic', async (req, res) => {
+  try {
+    // Compter les notifications
+    const totalResult = await pool.query('SELECT COUNT(*) FROM notifications');
+    const activeResult = await pool.query('SELECT COUNT(*) FROM notifications WHERE expires_at > $1', 
+      [Math.floor(Date.now() / 1000)]);
+    
+    // Récupérer quelques exemples
+    const samplesResult = await pool.query(`
+      SELECT id, title, type, priority, created_at, expires_at
+      FROM notifications 
+      WHERE expires_at > $1 
+      ORDER BY created_at DESC 
+      LIMIT 3
+    `, [Math.floor(Date.now() / 1000)]);
+    
+    res.json({
+      database: {
+        total: parseInt(totalResult.rows[0].count),
+        active: parseInt(activeResult.rows[0].count),
+        samples: samplesResult.rows
+      },
+      websocket: {
+        serverActive: !!wss,
+        connectedClients: connectedClients.size,
+        clientIds: Array.from(connectedClients.keys()).slice(0, 5)
+      },
+      server: {
+        uptime: process.uptime(),
+        timestamp: Date.now()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/test-notifications-send', async (req, res) => {
+  try {
+    console.log('🧪 Test d\'envoi de notifications à tous les clients connectés');
+    
+    // Récupérer les notifications existantes
+    const result = await pool.query(`
+      SELECT *, 
+             created_at * 1000 as timestamp,
+             expires_at * 1000 as expires_at_ms
+      FROM notifications 
+      WHERE expires_at > $1 
+      ORDER BY created_at DESC 
+      LIMIT 5
+    `, [Math.floor(Date.now() / 1000)]);
+    
+    if (result.rows.length === 0) {
+      return res.json({
+        success: false,
+        message: 'Aucune notification à envoyer',
+        connectedClients: connectedClients.size
+      });
+    }
+    
+    let totalSent = 0;
+    
+    // Envoyer chaque notification
+    for (const row of result.rows) {
+      const notification = {
+        id: row.id,
+        title: row.title,
+        message: row.message,
+        type: row.type,
+        priority: row.priority,
+        target: row.target,
+        createdBy: row.created_by,
+        timestamp: row.timestamp,
+        expiresAt: row.expires_at_ms,
+        isHistorical: false
+      };
+      
+      const sent = broadcastNotification(notification);
+      totalSent += sent;
+      
+      // Attendre un peu entre chaque notification
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    res.json({
+      success: true,
+      message: `Test terminé - ${totalSent} notifications envoyées`,
+      notificationsSent: result.rows.length,
+      totalTransmissions: totalSent,
+      connectedClients: connectedClients.size
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur test notifications:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 app.get('/api/websocket/status', (req, res) => {
   res.json({
     wsServerActive: !!wss,
@@ -434,6 +530,11 @@ async function sendExistingNotificationsToClient(ws, clientId) {
   try {
     console.log(`📬 Envoi notifications historiques à ${clientId}`);
     
+    if (ws.readyState !== WebSocket.OPEN) {
+      console.log(`❌ Client ${clientId} non connecté, annulation envoi`);
+      return;
+    }
+    
     const result = await pool.query(`
       SELECT *, 
              created_at * 1000 as timestamp,
@@ -441,59 +542,89 @@ async function sendExistingNotificationsToClient(ws, clientId) {
       FROM notifications 
       WHERE expires_at > $1 
       ORDER BY created_at DESC 
-      LIMIT 5
+      LIMIT 10
     `, [Math.floor(Date.now() / 1000)]);
     
     if (result.rows.length === 0) {
       console.log(`📭 Aucune notification historique pour ${clientId}`);
+      
+      // Envoyer un message confirmant qu'il n'y a pas de notifications
+      ws.send(JSON.stringify({
+        type: 'notifications_history',
+        data: [],
+        message: 'Aucune notification disponible',
+        timestamp: Date.now()
+      }));
       return;
     }
     
-    // Envoyer chaque notification avec un petit délai
-    for (let i = 0; i < result.rows.length; i++) {
-      const row = result.rows[i];
-      
-      const notification = {
-        id: row.id,
-        title: row.title,
-        message: row.message,
-        type: row.type,
-        priority: row.priority,
-        target: row.target,
-        createdBy: row.created_by,
-        timestamp: row.timestamp,
-        expiresAt: row.expires_at_ms,
-        isHistorical: true
-      };
-      
-      try {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
-            type: 'notification',
-            data: notification,
-            serverTime: Date.now()
-          }));
-          
-          console.log(`📨 Notification historique #${i+1} envoyée à ${clientId}: "${notification.title}"`);
-          
-          // Petit délai entre les envois
-          if (i < result.rows.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 200));
-          }
-        } else {
-          console.log(`⚠️ Client ${clientId} déconnecté pendant l'envoi historique`);
-          break;
-        }
-      } catch (error) {
-        console.error(`❌ Erreur envoi notification historique à ${clientId}:`, error);
-        break;
-      }
-    }
+    console.log(`📨 ${result.rows.length} notifications à envoyer à ${clientId}`);
     
-    console.log(`✅ ${result.rows.length} notifications historiques envoyées à ${clientId}`);
+    // CORRECTION : Envoyer toutes les notifications en une seule fois
+    const notifications = result.rows.map(row => ({
+      id: row.id,
+      title: row.title,
+      message: row.message,
+      type: row.type,
+      priority: row.priority,
+      target: row.target,
+      createdBy: row.created_by,
+      timestamp: row.timestamp, // En millisecondes
+      expiresAt: row.expires_at_ms,
+      createdAt: row.created_at,
+      isHistorical: true
+    }));
+    
+    // Envoyer l'historique complet
+    try {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'notifications_history',
+          data: notifications,
+          count: notifications.length,
+          timestamp: Date.now()
+        }));
+        
+        console.log(`✅ ${notifications.length} notifications historiques envoyées à ${clientId}`);
+        
+        // Puis envoyer chaque notification individuellement pour déclencher les alertes
+        setTimeout(() => {
+          notifications.slice(0, 3).forEach((notification, index) => {
+            setTimeout(() => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                  type: 'notification',
+                  data: notification,
+                  serverTime: Date.now()
+                }));
+                console.log(`🔔 Notification individuelle #${index+1} envoyée: "${notification.title}"`);
+              }
+            }, index * 500); // Délai de 500ms entre chaque notification
+          });
+        }, 1000);
+        
+      } else {
+        console.log(`❌ Client ${clientId} déconnecté pendant l'envoi`);
+      }
+    } catch (error) {
+      console.error(`❌ Erreur envoi notifications à ${clientId}:`, error);
+    }
     
   } catch (error) {
     console.error(`❌ Erreur chargement notifications historiques pour ${clientId}:`, error);
+    
+    // Envoyer une notification d'erreur
+    try {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'error',
+          message: 'Erreur lors du chargement des notifications',
+          timestamp: Date.now()
+        }));
+      }
+    } catch (sendError) {
+      console.error(`❌ Erreur envoi message d'erreur:`, sendError);
+    }
   }
 }
 app.get('/api/websocket/diagnostic', (req, res) => {
@@ -530,17 +661,44 @@ app.get('/api/notifications', async (req, res) => {
   const { limit = 20, offset = 0 } = req.query;
   
   try {
+    console.log(`📨 API notifications appelée - limit: ${limit}, offset: ${offset}`);
+    
     const result = await pool.query(`
-      SELECT * FROM notifications 
+      SELECT *, 
+             created_at * 1000 as timestamp,
+             expires_at * 1000 as expires_at_ms
+      FROM notifications 
       WHERE expires_at > $1 
       ORDER BY created_at DESC 
       LIMIT $2 OFFSET $3
     `, [Math.floor(Date.now() / 1000), parseInt(limit), parseInt(offset)]);
     
-    res.json({ notifications: result.rows });
+    const notifications = result.rows.map(row => ({
+      id: row.id,
+      title: row.title,
+      message: row.message,
+      type: row.type,
+      priority: row.priority,
+      target: row.target,
+      createdBy: row.created_by,
+      timestamp: row.timestamp, // En millisecondes pour le client
+      expiresAt: row.expires_at_ms,
+      createdAt: row.created_at
+    }));
+    
+    console.log(`✅ ${notifications.length} notifications renvoyées par l'API`);
+    
+    res.json({ 
+      notifications,
+      total: notifications.length,
+      success: true
+    });
   } catch (error) {
-    console.error('Erreur récupération notifications:', error);
-    res.status(500).json({ error: 'Erreur lors de la récupération des notifications' });
+    console.error('❌ Erreur récupération notifications:', error);
+    res.status(500).json({ 
+      error: 'Erreur lors de la récupération des notifications',
+      success: false 
+    });
   }
 });
 
