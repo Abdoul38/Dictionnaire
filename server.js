@@ -230,12 +230,14 @@ function broadcastNotification(notification) {
     return 0;
   }
   
+  const messageType = notification.isUpdate ? 'notification_updated' : 'notification';
+  
   const message = JSON.stringify({
-    type: 'notification',
+    type: messageType,
     data: {
       ...notification,
       timestamp: notification.timestamp || Date.now(),
-      isHistorical: false // Nouvelle notification
+      isHistorical: false
     },
     serverTime: Date.now()
   });
@@ -1107,6 +1109,178 @@ app.get('/api/test', (req, res) => {
     database: 'PostgreSQL',
     client_ip: req.ip
   });
+});
+
+// PUT /api/admin/notifications/:id - Modifier une notification
+app.put('/api/admin/notifications/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, message, type, priority, target, expiresAt } = req.body;
+    
+    // Validation
+    if (!title || !message) {
+      return res.status(400).json({ error: 'Titre et message requis' });
+    }
+    
+    // Vérifier si la notification existe
+    const notificationCheck = await pool.query(
+      'SELECT id FROM notifications WHERE id = $1',
+      [id]
+    );
+    
+    if (notificationCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Notification non trouvée' });
+    }
+    
+    // Mettre à jour la notification
+    await pool.query(`
+      UPDATE notifications 
+      SET title = $1, message = $2, type = $3, priority = $4, 
+          target = $5, expires_at = $6, updated_at = EXTRACT(EPOCH FROM NOW())
+      WHERE id = $7
+    `, [
+      title,
+      message,
+      type || 'info',
+      priority || 'normal',
+      target || 'all',
+      Math.floor((expiresAt || (Date.now() + (7 * 24 * 60 * 60 * 1000))) / 1000),
+      id
+    ]);
+    
+    // Récupérer la notification mise à jour
+    const result = await pool.query(`
+      SELECT *, 
+             created_at * 1000 as timestamp,
+             expires_at * 1000 as expires_at_ms
+      FROM notifications 
+      WHERE id = $1
+    `, [id]);
+    
+    const updatedNotification = {
+      id: result.rows[0].id,
+      title: result.rows[0].title,
+      message: result.rows[0].message,
+      type: result.rows[0].type,
+      priority: result.rows[0].priority,
+      target: result.rows[0].target,
+      createdBy: result.rows[0].created_by,
+      timestamp: result.rows[0].timestamp,
+      expiresAt: result.rows[0].expires_at_ms
+    };
+    
+    // Diffuser la notification mise à jour
+    const sentCount = broadcastNotification({
+      ...updatedNotification,
+      isUpdate: true
+    });
+    
+    res.json({
+      success: true,
+      message: `Notification modifiée et diffusée à ${sentCount} clients`,
+      notification: updatedNotification
+    });
+    
+  } catch (error) {
+    console.error('Erreur modification notification:', error);
+    res.status(500).json({ 
+      error: 'Erreur lors de la modification de la notification',
+      details: error.message 
+    });
+  }
+});
+
+// DELETE /api/admin/notifications/:id - Supprimer une notification
+app.delete('/api/admin/notifications/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Vérifier si la notification existe
+    const notificationCheck = await pool.query(
+      'SELECT id, title FROM notifications WHERE id = $1',
+      [id]
+    );
+    
+    if (notificationCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Notification non trouvée' });
+    }
+    
+    const notificationTitle = notificationCheck.rows[0].title;
+    
+    // Supprimer la notification
+    await pool.query('DELETE FROM notifications WHERE id = $1', [id]);
+    
+    // Diffuser un message de suppression
+    const deletionMessage = {
+      type: 'notification_deleted',
+      notificationId: id,
+      message: `Notification "${notificationTitle}" supprimée`,
+      timestamp: Date.now()
+    };
+    
+    let deletedCount = 0;
+    connectedClients.forEach(({ ws }, clientId) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify(deletionMessage));
+          deletedCount++;
+        } catch (error) {
+          console.error(`Erreur envoi suppression à ${clientId}:`, error);
+        }
+      }
+    });
+    
+    res.json({
+      success: true,
+      message: `Notification supprimée (notification envoyée à ${deletedCount} clients)`,
+      notificationId: id
+    });
+    
+  } catch (error) {
+    console.error('Erreur suppression notification:', error);
+    res.status(500).json({ 
+      error: 'Erreur lors de la suppression de la notification',
+      details: error.message 
+    });
+  }
+});
+
+// GET /api/admin/notifications/:id - Récupérer une notification spécifique
+app.get('/api/admin/notifications/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const result = await pool.query(`
+      SELECT *, 
+             created_at * 1000 as timestamp,
+             expires_at * 1000 as expires_at_ms
+      FROM notifications 
+      WHERE id = $1
+    `, [id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Notification non trouvée' });
+    }
+    
+    const notification = result.rows[0];
+    
+    res.json({
+      id: notification.id,
+      title: notification.title,
+      message: notification.message,
+      type: notification.type,
+      priority: notification.priority,
+      target: notification.target,
+      createdBy: notification.created_by,
+      timestamp: notification.timestamp,
+      expiresAt: notification.expires_at_ms,
+      createdAt: notification.created_at
+    });
+    
+  } catch (error) {
+    console.error('Erreur récupération notification:', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération de la notification' });
+  }
 });
 
 // Routes d'authentification
