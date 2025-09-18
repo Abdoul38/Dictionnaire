@@ -328,63 +328,70 @@ function initializeWebSocket(server) {
   }
 }
 
+const originalBroadcastNotification = broadcastNotification;
+
 function broadcastNotification(notification) {
-  if (!wss) {
-    console.log('❌ WebSocket Server non initialisé');
-    return 0;
-  }
+  // WebSocket broadcast (existant)
+  const wsCount = originalBroadcastNotification(notification);
   
-  const messageType = notification.isUpdate ? 'notification_updated' : 'notification';
-  
-  const message = JSON.stringify({
-    type: messageType,
-    data: {
-      ...notification,
-      timestamp: notification.timestamp || Date.now(),
-      isHistorical: false
-    },
-    serverTime: Date.now()
+  // Push notification (nouveau)
+  sendPushNotificationToAllDevices(notification).then(pushResult => {
+    console.log(`📊 Diffusion totale: WebSocket=${wsCount}, Push=${pushResult.success}`);
+  }).catch(error => {
+    console.error('❌ Erreur push notification:', error);
   });
   
-  let sentCount = 0;
-  let errorCount = 0;
-  const deadConnections = [];
-  
-  console.log(`📢 Diffusion notification "${notification.title}" à ${connectedClients.size} clients`);
-  
-  connectedClients.forEach(({ ws, info }, clientId) => {
-    if (ws.readyState === WebSocket.OPEN) {
-      try {
-        ws.send(message);
-        sentCount++;
-        console.log(`✅ Notification envoyée à ${clientId} (${info.ip})`);
-      } catch (error) {
-        console.error(`❌ Erreur envoi à ${clientId}:`, error);
-        deadConnections.push(clientId);
-        errorCount++;
-      }
-    } else {
-      console.log(`⚠️ Client ${clientId} dans état ${ws.readyState}, suppression`);
-      deadConnections.push(clientId);
-    }
-  });
-  
-  // Nettoyer les connexions mortes
-  deadConnections.forEach(clientId => {
-    connectedClients.delete(clientId);
-  });
-  
-  const result = {
-    sent: sentCount,
-    errors: errorCount,
-    totalClients: connectedClients.size,
-    notification: notification.title
-  };
-  
-  console.log(`📊 Résultat diffusion:`, result);
-  
-  return sentCount;
+  return wsCount;
 }
+
+app.post('/api/test-push', async (req, res) => {
+  try {
+    const testNotification = {
+      id: 'test-' + Date.now(),
+      title: 'Test Push Notification',
+      message: 'Ceci est un test de notification push depuis le serveur Zarma',
+      type: 'test',
+      priority: 'high',
+      timestamp: Date.now()
+    };
+    
+    const result = await sendPushNotificationToAllDevices(testNotification);
+    
+    res.json({
+      success: true,
+      message: `Test envoyé à ${result.success} appareils (${result.failed} échecs)`,
+      details: result,
+      notification: testNotification
+    });
+  } catch (error) {
+    console.error('❌ Erreur test push:', error);
+    res.status(500).json({ 
+      error: 'Erreur lors du test push',
+      details: error.message 
+    });
+  }
+});
+
+app.get('/api/devices', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT device_id, platform, is_active, created_at, updated_at,
+             SUBSTRING(fcm_token, 1, 20) || '...' as token_preview
+      FROM user_devices 
+      ORDER BY updated_at DESC
+    `);
+    
+    res.json({
+      devices: result.rows,
+      total: result.rows.length,
+      active: result.rows.filter(d => d.is_active).length
+    });
+  } catch (error) {
+    console.error('❌ Erreur récupération devices:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 
 app.get('/api/notifications-diagnostic', async (req, res) => {
   try {
@@ -494,43 +501,174 @@ app.get('/api/websocket/status', (req, res) => {
   });
 });
 
+app.post('/api/register-device', async (req, res) => {
+  try {
+    const { userId, fcmToken, platform, deviceId } = req.body;
+    
+    if (!fcmToken || !deviceId) {
+      return res.status(400).json({ error: 'fcmToken et deviceId requis' });
+    }
+    
+    // Insérer ou mettre à jour le token
+    await pool.query(`
+      INSERT INTO user_devices (user_id, device_id, fcm_token, platform, app_version, is_active)
+      VALUES ($1, $2, $3, $4, $5, TRUE)
+      ON CONFLICT (device_id, fcm_token) 
+      DO UPDATE SET 
+        is_active = TRUE,
+        updated_at = EXTRACT(EPOCH FROM NOW())
+    `, [userId || null, deviceId, fcmToken, platform || 'flutter', '1.0.0']);
+    
+    console.log(`📱 Device enregistré: ${deviceId.substring(0, 8)}... avec token FCM`);
+    
+    res.json({
+      success: true,
+      message: 'Device enregistré avec succès'
+    });
+    
+  } catch (error) {
+    console.error('Erreur enregistrement device:', error);
+    res.status(500).json({ 
+      error: 'Erreur lors de l\'enregistrement du device',
+      details: error.message 
+    });
+  }
+});
+
+async function sendPushNotificationToAllDevices(notification) {
+  if (!admin.apps.length) {
+    console.warn('⚠️ Firebase Admin non initialisé');
+    return { success: 0, failed: 0 };
+  }
+  
+  try {
+    console.log(`📤 Envoi notification push: "${notification.title}"`);
+    
+    // Récupérer les tokens actifs
+    const devicesResult = await pool.query(`
+      SELECT fcm_token, device_id 
+      FROM user_devices 
+      WHERE is_active = TRUE 
+        AND fcm_token IS NOT NULL 
+        AND fcm_token != ''
+      ORDER BY updated_at DESC
+    `);
+    
+    if (devicesResult.rows.length === 0) {
+      console.log('📭 Aucun device actif trouvé');
+      return { success: 0, failed: 0 };
+    }
+    
+    const tokens = devicesResult.rows.map(row => row.fcm_token);
+    console.log(`📱 ${tokens.length} devices trouvés pour notification push`);
+    
+    // Préparer le message
+    const message = {
+      notification: {
+        title: notification.title,
+        body: notification.message || notification.body,
+      },
+      data: {
+        notificationId: notification.id || 'unknown',
+        type: notification.type || 'info',
+        priority: notification.priority || 'normal',
+        timestamp: (notification.timestamp || Date.now()).toString(),
+        click_action: 'FLUTTER_NOTIFICATION_CLICK'
+      },
+      android: {
+        notification: {
+          channelId: 'zarma_notifications',
+          priority: 'high',
+          defaultSound: true,
+          defaultVibrateTimings: true,
+          icon: '@mipmap/ic_launcher',
+        },
+        priority: 'high',
+      },
+      apns: {
+        payload: {
+          aps: {
+            alert: {
+              title: notification.title,
+              body: notification.message || notification.body,
+            },
+            badge: 1,
+            sound: 'default',
+          },
+        },
+      },
+      tokens: tokens,
+    };
+    
+    // Envoyer en batch
+    const response = await admin.messaging().sendEachForMulticast(message);
+    
+    console.log(`✅ Push envoyé: ${response.successCount} réussies, ${response.failureCount} échecs`);
+    
+    // Gérer les tokens invalides
+    if (response.failureCount > 0) {
+      const failedTokens = [];
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success && resp.error) {
+          const errorCode = resp.error.code;
+          if (errorCode === 'messaging/invalid-registration-token' || 
+              errorCode === 'messaging/registration-token-not-registered') {
+            failedTokens.push(tokens[idx]);
+          }
+          console.error(`❌ Erreur token ${idx}: ${resp.error.message}`);
+        }
+      });
+      
+      if (failedTokens.length > 0) {
+        await pool.query(
+          'UPDATE user_devices SET is_active = FALSE WHERE fcm_token = ANY($1)',
+          [failedTokens]
+        );
+        console.log(`🧹 ${failedTokens.length} tokens invalides désactivés`);
+      }
+    }
+    
+    return { success: response.successCount, failed: response.failureCount };
+    
+  } catch (error) {
+    console.error('❌ Erreur envoi notification push:', error);
+    return { success: 0, failed: 1, error: error.message };
+  }
+}
 
 // Routes pour les notifications administrateur
 // Corrections pour les notifications dans server.js
 
 // 1. Corriger la route de création de notifications
-app.post('/api/admin/notifications', authenticateToken, async (req, res) => {
+app.post('/api/admin/notifications', async (req, res) => {
   try {
-    // Vérifier le corps de la requête
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({ error: 'Corps de la requête manquant' });
     }
     
     const { title, message, type, priority, target, expiresAt } = req.body;
     
-    // Validation
     if (!title || !message) {
       return res.status(400).json({ error: 'Titre et message requis' });
     }
     
-    // Vérifier l'authentification
     if (!req.user || !req.user.username) {
       return res.status(401).json({ error: 'Utilisateur non authentifié' });
     }
     
     const notification = {
-      id: uuidv4(), // Assurer que uuid est disponible
+      id: uuidv4(),
       title,
       message,
       type: type || 'info',
       priority: priority || 'normal',
       target: target || 'all',
-      createdAt: Date.now(), // Utiliser timestamp en millisecondes pour le WebSocket
-      expiresAt: expiresAt || (Date.now() + (7 * 24 * 60 * 60 * 1000)), // 7 jours en ms
+      createdAt: Date.now(),
+      expiresAt: expiresAt || (Date.now() + (7 * 24 * 60 * 60 * 1000)),
       createdBy: req.user.username
     };
     
-    // Sauvegarder dans la base (convertir en secondes pour PostgreSQL)
+    // Sauvegarder dans la base
     await pool.query(`
       INSERT INTO notifications (id, title, message, type, priority, target, created_by, created_at, expires_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -542,27 +680,34 @@ app.post('/api/admin/notifications', authenticateToken, async (req, res) => {
       notification.priority,
       notification.target,
       notification.createdBy,
-      Math.floor(notification.createdAt / 1000), // Convertir en secondes pour DB
-      Math.floor(notification.expiresAt / 1000)  // Convertir en secondes pour DB
+      Math.floor(notification.createdAt / 1000),
+      Math.floor(notification.expiresAt / 1000)
     ]);
     
-    // Diffuser en temps réel
-    const sentCount = broadcastNotification(notification);
+    // Diffuser en WebSocket ET Push
+    const wsCount = originalBroadcastNotification ? originalBroadcastNotification(notification) : 0;
+    const pushResult = await sendPushNotificationToAllDevices(notification);
     
     res.json({
       success: true,
-      message: `Notification créée et diffusée à ${sentCount} clients`,
+      message: `Notification créée et diffusée`,
+      details: {
+        websocket: `${wsCount} connexions`,
+        push: `${pushResult.success} devices (${pushResult.failed} échecs)`
+      },
       notification
     });
     
   } catch (error) {
-    console.error('Erreur création notification:', error);
+    console.error('❌ Erreur création notification:', error);
     res.status(500).json({ 
       error: 'Erreur lors de la création de la notification',
       details: error.message 
     });
   }
 });
+
+console.log('🚀 Routes de notifications push ajoutées');
 
 // 2. Corriger la route de récupération des notifications
 app.get('/api/notifications', async (req, res) => {
