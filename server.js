@@ -18,6 +18,33 @@ const { body, validationResult } = require('express-validator');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// server.js - Ajoutez en haut du fichier après les imports
+const admin = require('firebase-admin');
+
+
+// Configuration Firebase Admin
+try {
+  const serviceAccountPath = path.join(__dirname, 'config', 'dictionnaire-zarma-firebase-adminsdk-fbsvc-ad2a95728a.json');
+  
+  if (fs.existsSync(serviceAccountPath)) {
+    const serviceAccount = require(serviceAccountPath);
+    
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      // Optionnel: Ajoutez votre projectId si nécessaire
+      projectId: serviceAccount.project_id || 'dictionnaire-zarma'
+    });
+    
+    console.log('✅ Firebase Admin initialisé avec succès');
+  } else {
+    console.warn('⚠️ Fichier de service account Firebase non trouvé. Les notifications push ne fonctionneront pas.');
+    console.warn('📁 Chemin attendu:', serviceAccountPath);
+  }
+} catch (error) {
+  console.error('❌ Erreur initialisation Firebase Admin:', error.message);
+  console.warn('⚠️ Les notifications push ne fonctionneront pas sans configuration Firebase valide');
+}
 // ========================================
 // server-updated.js - Corrections principales
 // ========================================
@@ -81,6 +108,83 @@ function initializeWebSocket(server) {
         return true; // Accepter toutes les connexions
       }
     });
+
+    app.post('/api/send-push-notification', authenticateToken, async (req, res) => {
+  try {
+    const { notificationId, targetDevices = 'all' } = req.body;
+    
+    // Récupérer la notification depuis PostgreSQL
+    const notificationResult = await pool.query(`
+      SELECT * FROM notifications WHERE id = $1
+    `, [notificationId]);
+    
+    if (notificationResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Notification non trouvée' });
+    }
+    
+    const notification = notificationResult.rows[0];
+    
+    // Récupérer les tokens FCM des devices cibles
+    let devicesQuery = 'SELECT fcm_token FROM user_devices WHERE is_active = TRUE';
+    const params = [];
+    
+    if (targetDevices !== 'all') {
+      // Implémentez votre logique de ciblage spécifique
+    }
+    
+    const devicesResult = await pool.query(devicesQuery, params);
+    const tokens = devicesResult.rows.map(row => row.fcm_token).filter(token => token);
+    
+    if (tokens.length === 0) {
+      return res.json({ 
+        success: true, 
+        message: 'Aucun device actif pour envoyer la notification' 
+      });
+    }
+    
+    // Préparer le message de notification
+    const message = {
+      notification: {
+        title: notification.title,
+        body: notification.message,
+      },
+      data: {
+        notificationId: notification.id,
+        type: notification.type,
+        priority: notification.priority,
+        timestamp: notification.created_at.toString(),
+        click_action: 'FLUTTER_NOTIFICATION_CLICK'
+      },
+      tokens: tokens,
+    };
+    
+    // Envoyer la notification
+    const response = await admin.messaging().sendEachForMulticast(message);
+    
+    res.json({
+      success: true,
+      message: `Notification envoyée à ${response.successCount} appareils`,
+      details: {
+        successCount: response.successCount,
+        failureCount: response.failureCount,
+        notification: {
+          id: notification.id,
+          title: notification.title
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('Erreur envoi notification push:', error);
+    res.status(500).json({ 
+      error: 'Erreur lors de l\'envoi de la notification push',
+      details: error.message 
+    });
+  }
+});
+
+// Table pour stocker les tokens FCM des devices
+
     
     // CORRECTION: Gérer les événements du serveur WebSocket
     wss.on('error', (error) => {
@@ -3061,6 +3165,20 @@ await pool.query(`
     created_at BIGINT NOT NULL,
     expires_at BIGINT NOT NULL,
     is_active BOOLEAN DEFAULT TRUE
+  )
+`);
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS user_devices(
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES admin_users(id) ON DELETE CASCADE,
+    device_id VARCHAR(255) NOT NULL,
+    fcm_token TEXT NOT NULL,
+    platform VARCHAR(50),
+    app_version VARCHAR(50),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()),
+    updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()),
+    UNIQUE(device_id, fcm_token)
   )
 `);
 
