@@ -461,6 +461,7 @@
             
             <div style="text-align: center; margin-top: 20px;">
                 <button type="submit" class="btn btn-primary">Envoyer la Notification</button>
+                <button type="button" class="btn btn-secondary" id="cancel-edit-btn" style="display: none;">Annuler</button>
             </div>
         </form>
     </div>
@@ -826,37 +827,67 @@ async function authenticatedRequest(url, options = {}) {
 });
 
 // Charger les notifications
+// Charger les notifications
 async function loadNotifications() {
-    const container = document.getElementById('notifications-list');
+  const container = document.getElementById('notifications-list');
+  
+  try {
+    const response = await authenticatedRequest(`${API_BASE}/notifications?limit=20`);
     
-    try {
-        const response = await authenticatedRequest(`${API_BASE}/notifications?limit=10`);
-        
-        if (response && response.ok) {
-            const data = await response.json();
-            
-            container.innerHTML = data.notifications.map(notif => `
-                <div class="word-card">
-                    <div class="word-header">
-                        <div class="word-zarma">${notif.title}</div>
-                        <div class="word-category" style="background: ${getNotificationColor(notif.type)}">
-                            ${notif.type}
-                        </div>
-                    </div>
-                    <div class="word-meaning">${notif.message}</div>
-                    <div class="word-examples">
-                        <strong>Priorité:</strong> ${notif.priority}<br>
-                        <strong>Cible:</strong> ${notif.target}<br>
-                        <strong>Créé par:</strong> ${notif.created_by}<br>
-                        <strong>Date:</strong> ${new Date(notif.created_at * 1000).toLocaleString()}
-                    </div>
-                </div>
-            `).join('');
-        }
-    } catch (error) {
-        console.error('Erreur:', error);
-        container.innerHTML = '<div class="no-data">Erreur lors du chargement des notifications</div>';
+    if (response && response.ok) {
+      const data = await response.json();
+      
+      container.innerHTML = data.notifications.map(notif => `
+        <div class="word-card">
+          <div class="word-header">
+            <div class="word-zarma">${notif.title}</div>
+            <div class="word-category" style="background: ${getNotificationColor(notif.type)}">
+              ${notif.type}
+            </div>
+          </div>
+          <div class="word-meaning">${notif.message}</div>
+          <div class="word-examples">
+            <strong>Priorité:</strong> ${notif.priority}<br>
+            <strong>Cible:</strong> ${notif.target}<br>
+            <strong>Créé par:</strong> ${notif.createdBy}<br>
+            <strong>Date:</strong> ${new Date(notif.timestamp).toLocaleString()}
+          </div>
+          <div class="word-actions">
+            <button class="btn btn-secondary edit-notification-btn" 
+                    data-notification-id="${notif.id}"
+                    data-notification-title="${notif.title}">
+              Modifier
+            </button>
+            <button class="btn btn-danger delete-notification-btn" 
+                    data-notification-id="${notif.id}"
+                    data-notification-title="${notif.title}">
+              Supprimer
+            </button>
+          </div>
+        </div>
+      `).join('');
+      
+      // Ajouter les écouteurs d'événements
+      document.querySelectorAll('.edit-notification-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const notificationId = this.getAttribute('data-notification-id');
+          editNotification(notificationId);
+        });
+      });
+      
+      document.querySelectorAll('.delete-notification-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const notificationId = this.getAttribute('data-notification-id');
+          const notificationTitle = this.getAttribute('data-notification-title');
+          deleteNotification(notificationId, notificationTitle);
+        });
+      });
+      
     }
+  } catch (error) {
+    console.error('Erreur:', error);
+    container.innerHTML = '<div class="no-data">Erreur lors du chargement des notifications</div>';
+  }
 }
 
 function getNotificationColor(type) {
@@ -1155,6 +1186,13 @@ function getNotificationColor(type) {
                 showNotification('Erreur de connexion', 'error');
             }
         }
+        // Gérer l'affichage du bouton d'annulation
+document.getElementById('notification-form').addEventListener('input', function() {
+  const cancelBtn = document.getElementById('cancel-edit-btn');
+  cancelBtn.style.display = this.dataset.editingId ? 'inline-block' : 'none';
+});
+
+document.getElementById('cancel-edit-btn').addEventListener('click', cancelEdit);
 
         // Supprimer un mot
         async function deleteWord(id, wordName) {
@@ -1404,6 +1442,124 @@ function downloadSampleFile(format) {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
     }
+}
+
+// Modifier une notification
+async function editNotification(notificationId) {
+  try {
+    // Charger les données de la notification
+    const response = await authenticatedRequest(`${API_BASE}/admin/notifications/${notificationId}`);
+    
+    if (response && response.ok) {
+      const notification = await response.json();
+      
+      // Remplir le formulaire
+      document.getElementById('notification-title').value = notification.title;
+      document.getElementById('notification-message').value = notification.message;
+      document.getElementById('notification-type').value = notification.type;
+      document.getElementById('notification-priority').value = notification.priority;
+      document.getElementById('notification-target').value = notification.target;
+      
+      // Stocker l'ID de la notification en cours d'édition
+      document.getElementById('notification-form').dataset.editingId = notificationId;
+      
+      // Changer le texte du bouton
+      document.querySelector('#notification-form button[type="submit"]').textContent = 'Modifier la Notification';
+      
+      showNotification('Notification chargée pour modification');
+      
+    } else {
+      showNotification('Erreur lors du chargement de la notification', 'error');
+    }
+  } catch (error) {
+    console.error('Erreur:', error);
+    showNotification('Erreur lors du chargement de la notification', 'error');
+  }
+}
+
+// Supprimer une notification
+async function deleteNotification(notificationId, notificationTitle) {
+  if (!confirm(`Êtes-vous sûr de vouloir supprimer la notification "${notificationTitle}" ? Cette action est irréversible.`)) {
+    return;
+  }
+
+  try {
+    const response = await authenticatedRequest(`${API_BASE}/admin/notifications/${notificationId}`, {
+      method: 'DELETE'
+    });
+
+    if (response && response.ok) {
+      const result = await response.json();
+      showNotification(result.message || 'Notification supprimée avec succès!');
+      loadNotifications();
+    } else if (response) {
+      const error = await response.json();
+      showNotification(error.error || 'Erreur lors de la suppression', 'error');
+    }
+  } catch (error) {
+    console.error('Erreur:', error);
+    showNotification('Erreur lors de la suppression de la notification', 'error');
+  }
+}
+
+// Modifier le gestionnaire du formulaire de notification
+document.getElementById('notification-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  
+  const title = document.getElementById('notification-title').value;
+  const message = document.getElementById('notification-message').value;
+  const type = document.getElementById('notification-type').value;
+  const priority = document.getElementById('notification-priority').value;
+  const target = document.getElementById('notification-target').value;
+  
+  const editingId = this.dataset.editingId;
+  const submitBtn = this.querySelector('button[type="submit"]');
+  const originalText = submitBtn.textContent;
+  
+  try {
+    submitBtn.disabled = true;
+    submitBtn.textContent = editingId ? 'Modification...' : 'Envoi...';
+    
+    let response;
+    if (editingId) {
+      // Modification
+      response = await authenticatedRequest(`${API_BASE}/admin/notifications/${editingId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ title, message, type, priority, target })
+      });
+    } else {
+      // Création
+      response = await authenticatedRequest(`${API_BASE}/admin/notifications`, {
+        method: 'POST',
+        body: JSON.stringify({ title, message, type, priority, target })
+      });
+    }
+    
+    if (response && response.ok) {
+      const result = await response.json();
+      showNotification(result.message);
+      document.getElementById('notification-form').reset();
+      delete this.dataset.editingId;
+      submitBtn.textContent = 'Envoyer la Notification';
+      loadNotifications();
+    } else {
+      showNotification('Erreur lors de l\'opération', 'error');
+    }
+  } catch (error) {
+    console.error('Erreur:', error);
+    showNotification('Erreur lors de l\'opération', 'error');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = originalText;
+  }
+});
+
+// Annuler l'édition
+function cancelEdit() {
+  document.getElementById('notification-form').reset();
+  delete document.getElementById('notification-form').dataset.editingId;
+  document.querySelector('#notification-form button[type="submit"]').textContent = 'Envoyer la Notification';
+  showNotification('Édition annulée');
 }
 
 // Améliorer l'interface utilisateur de l'import/export (BONUS)
