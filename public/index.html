@@ -747,18 +747,142 @@ async function authenticatedRequest(url, options = {}) {
 }
 
         // Configuration des écouteurs d'événements
-        function setupEventListeners() {
-            document.getElementById('logoutBtn').addEventListener('click', logout);
-            document.getElementById('word-form').addEventListener('submit', handleFormSubmit);
-            document.getElementById('clear-btn').addEventListener('click', clearForm);
-            document.getElementById('refresh-btn').addEventListener('click', loadWordsList);
-            document.getElementById('export-json').addEventListener('click', () => exportData('json'));
-            document.getElementById('export-csv').addEventListener('click', () => exportData('csv'));
-            document.getElementById('import-btn').addEventListener('click', importData);
-            document.getElementById('search-words').addEventListener('input', debounce(loadWordsList, 300));
-            document.getElementById('filter-category').addEventListener('change', loadWordsList);
-        }
+ // Configuration des écouteurs d'événements
+function setupEventListeners() {
+    document.getElementById('logoutBtn').addEventListener('click', logout);
+    document.getElementById('word-form').addEventListener('submit', handleFormSubmit);
+    document.getElementById('clear-btn').addEventListener('click', clearForm);
+    document.getElementById('refresh-btn').addEventListener('click', loadWordsList);
+    document.getElementById('export-json').addEventListener('click', () => exportData('json'));
+    document.getElementById('export-csv').addEventListener('click', () => exportData('csv'));
+    document.getElementById('import-btn').addEventListener('click', importData);
+    document.getElementById('search-words').addEventListener('input', debounce(loadWordsList, 300));
+    document.getElementById('filter-category').addEventListener('change', loadWordsList);
+    
+    // ✅ CORRECTION: UN SEUL écouteur pour le formulaire de notification
+    const notificationForm = document.getElementById('notification-form');
+    if (notificationForm) {
+        // Supprimer les anciens écouteurs s'ils existent
+        notificationForm.removeEventListener('submit', handleNotificationSubmit);
+        notificationForm.addEventListener('submit', handleNotificationSubmit);
+    }
+    
+    const cancelBtn = document.getElementById('cancel-edit-btn');
+    if (cancelBtn) {
+        cancelBtn.removeEventListener('click', cancelEdit);
+        cancelBtn.addEventListener('click', cancelEdit);
+    }
+}
 
+// Gestionnaire pour le formulaire de notification
+async function handleNotificationSubmit(e) {
+    e.preventDefault();
+    
+    // ✅ Protection contre double-clic
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    if (submitBtn.disabled) {
+        console.log('Soumission déjà en cours, ignorée');
+        return;
+    }
+    
+    const title = document.getElementById('notification-title').value.trim();
+    const message = document.getElementById('notification-message').value.trim();
+    const type = document.getElementById('notification-type').value;
+    const priority = document.getElementById('notification-priority').value;
+    const target = document.getElementById('notification-target').value;
+    
+    // Validation côté client
+    if (!title || !message) {
+        showNotification('Titre et message requis', 'error');
+        return;
+    }
+    
+    const editingId = e.target.dataset.editingId;
+    const originalText = submitBtn.textContent;
+    
+    try {
+        // ✅ Désactiver immédiatement le bouton
+        submitBtn.disabled = true;
+        submitBtn.textContent = editingId ? 'Modification...' : 'Envoi...';
+        
+        // ✅ Générer un ID unique côté client pour éviter les doublons
+        const requestId = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        
+        const requestData = { 
+            title, 
+            message, 
+            type, 
+            priority, 
+            target,
+            requestId // Ajouter l'ID de requête
+        };
+        
+        let response;
+        if (editingId) {
+            response = await authenticatedRequest(`${API_BASE}/admin/notifications/${editingId}`, {
+                method: 'PUT',
+                body: JSON.stringify(requestData)
+            });
+        } else {
+            // ✅ Vérifier si une requête similaire est en cours
+            if (handleNotificationSubmit._pendingRequests && 
+                handleNotificationSubmit._pendingRequests.has(title + message)) {
+                console.log('Requête similaire déjà en cours, ignorée');
+                return;
+            }
+            
+            // Marquer la requête comme en cours
+            if (!handleNotificationSubmit._pendingRequests) {
+                handleNotificationSubmit._pendingRequests = new Map();
+            }
+            handleNotificationSubmit._pendingRequests.set(title + message, requestId);
+            
+            try {
+                response = await authenticatedRequest(`${API_BASE}/admin/notifications`, {
+                    method: 'POST',
+                    body: JSON.stringify(requestData)
+                });
+            } finally {
+                // Nettoyer la requête en cours
+                setTimeout(() => {
+                    handleNotificationSubmit._pendingRequests?.delete(title + message);
+                }, 1000);
+            }
+        }
+        
+        if (response && response.ok) {
+            const result = await response.json();
+            
+            // ✅ Vérifier si c'est un doublon accepté
+            if (result.duplicate) {
+                showNotification('Notification déjà existante', 'warning');
+            } else {
+                showNotification(result.message || 'Opération réussie');
+            }
+            
+            // Réinitialiser le formulaire seulement si ce n'est pas un doublon
+            if (!result.duplicate) {
+                document.getElementById('notification-form').reset();
+                delete e.target.dataset.editingId;
+                submitBtn.textContent = 'Envoyer la Notification';
+                document.getElementById('cancel-edit-btn').style.display = 'none';
+                loadNotifications();
+            }
+        } else if (response) {
+            const error = await response.json();
+            showNotification(error.error || 'Erreur lors de l\'opération', 'error');
+        } else {
+            showNotification('Erreur de connexion', 'error');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showNotification('Erreur lors de l\'opération: ' + error.message, 'error');
+    } finally {
+        // ✅ Toujours réactiver le bouton
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalText;
+    }
+}
         // Configuration de la navigation par onglets
         function setupTabNavigation() {
             const tabs = document.querySelectorAll('.tab');
@@ -797,99 +921,111 @@ async function authenticatedRequest(url, options = {}) {
                 }
             }
         }
-       document.getElementById('notification-form').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    
-    const title = document.getElementById('notification-title').value;
-    const message = document.getElementById('notification-message').value;
-    const type = document.getElementById('notification-type').value;
-    const priority = document.getElementById('notification-priority').value;
-    const target = document.getElementById('notification-target').value;
-    
-    try {
-        const response = await authenticatedRequest(`${API_BASE}/admin/notifications`, {
-            method: 'POST',
-            body: JSON.stringify({ title, message, type, priority, target })
-        });
-        
-        if (response && response.ok) {
-            const result = await response.json();
-            showNotification('Notification envoyée avec succès!');
-            document.getElementById('notification-form').reset();
-            loadNotifications();
-        } else {
-            showNotification('Erreur lors de l\'envoi de la notification', 'error');
-        }
-    } catch (error) {
-        console.error('Erreur:', error);
-        showNotification('Erreur lors de l\'envoi de la notification', 'error');
-    }
-});
-
+ 
 // Charger les notifications
 // Charger les notifications
 async function loadNotifications() {
-  const container = document.getElementById('notifications-list');
-  
-  try {
-    const response = await authenticatedRequest(`${API_BASE}/notifications?limit=20`);
+    const container = document.getElementById('notifications-list');
     
-    if (response && response.ok) {
-      const data = await response.json();
-      
-      container.innerHTML = data.notifications.map(notif => `
-        <div class="word-card">
-          <div class="word-header">
-            <div class="word-zarma">${notif.title}</div>
-            <div class="word-category" style="background: ${getNotificationColor(notif.type)}">
-              ${notif.type}
-            </div>
-          </div>
-          <div class="word-meaning">${notif.message}</div>
-          <div class="word-examples">
-            <strong>Priorité:</strong> ${notif.priority}<br>
-            <strong>Cible:</strong> ${notif.target}<br>
-            <strong>Créé par:</strong> ${notif.createdBy}<br>
-            <strong>Date:</strong> ${new Date(notif.timestamp).toLocaleString()}
-          </div>
-          <div class="word-actions">
-            <button class="btn btn-secondary edit-notification-btn" 
-                    data-notification-id="${notif.id}"
-                    data-notification-title="${notif.title}">
-              Modifier
-            </button>
-            <button class="btn btn-danger delete-notification-btn" 
-                    data-notification-id="${notif.id}"
-                    data-notification-title="${notif.title}">
-              Supprimer
-            </button>
-          </div>
-        </div>
-      `).join('');
-      
-      // Ajouter les écouteurs d'événements
-      document.querySelectorAll('.edit-notification-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-          const notificationId = this.getAttribute('data-notification-id');
-          editNotification(notificationId);
-        });
-      });
-      
-      document.querySelectorAll('.delete-notification-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-          const notificationId = this.getAttribute('data-notification-id');
-          const notificationTitle = this.getAttribute('data-notification-title');
-          deleteNotification(notificationId, notificationTitle);
-        });
-      });
-      
+    if (!container) {
+        console.error('Container notifications-list non trouvé');
+        return;
     }
-  } catch (error) {
-    console.error('Erreur:', error);
-    container.innerHTML = '<div class="no-data">Erreur lors du chargement des notifications</div>';
-  }
+    
+    try {
+        const response = await authenticatedRequest(`${API_BASE}/notifications?limit=20`);
+        
+        if (response && response.ok) {
+            const data = await response.json();
+            
+            // ✅ Déduplication côté client
+            const uniqueNotifications = [];
+            const seenIds = new Set();
+            
+            for (const notif of data.notifications) {
+                if (!seenIds.has(notif.id)) {
+                    seenIds.add(notif.id);
+                    uniqueNotifications.push(notif);
+                }
+            }
+            
+            console.log(`📋 ${uniqueNotifications.length} notifications uniques chargées`);
+            
+            container.innerHTML = uniqueNotifications.map(notif => `
+                <div class="word-card" data-notification-id="${notif.id}">
+                    <div class="word-header">
+                        <div class="word-zarma">${escapeHtml(notif.title)}</div>
+                        <div class="word-category" style="background: ${getNotificationColor(notif.type)}">
+                            ${notif.type}
+                        </div>
+                    </div>
+                    <div class="word-meaning">${escapeHtml(notif.message)}</div>
+                    <div class="word-examples">
+                        <strong>Priorité:</strong> ${notif.priority}<br>
+                        <strong>Cible:</strong> ${notif.target}<br>
+                        <strong>Créé par:</strong> ${escapeHtml(notif.createdBy)}<br>
+                        <strong>Date:</strong> ${new Date(notif.timestamp).toLocaleString()}
+                    </div>
+                    <div class="word-actions">
+                        <button class="btn btn-secondary edit-notification-btn" 
+                                data-notification-id="${notif.id}"
+                                data-notification-title="${escapeHtml(notif.title)}">
+                            Modifier
+                        </button>
+                        <button class="btn btn-danger delete-notification-btn" 
+                                data-notification-id="${notif.id}"
+                                data-notification-title="${escapeHtml(notif.title)}">
+                            Supprimer
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+            
+            // ✅ Ajouter les écouteurs d'événements avec protection
+            attachNotificationEventListeners();
+            
+        } else {
+            container.innerHTML = '<div class="no-data">Erreur lors du chargement des notifications</div>';
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        container.innerHTML = '<div class="no-data">Erreur lors du chargement des notifications</div>';
+    }
 }
 
+function attachNotificationEventListeners() {
+    // Supprimer les anciens écouteurs pour éviter les doublons
+    document.querySelectorAll('.edit-notification-btn').forEach(btn => {
+        // Cloner pour supprimer tous les écouteurs
+        const newBtn = btn.cloneNode(true);
+        btn.parentNode.replaceChild(newBtn, btn);
+        
+        newBtn.addEventListener('click', function() {
+            const notificationId = this.getAttribute('data-notification-id');
+            editNotification(notificationId);
+        });
+    });
+    
+    document.querySelectorAll('.delete-notification-btn').forEach(btn => {
+        // Cloner pour supprimer tous les écouteurs
+        const newBtn = btn.cloneNode(true);
+        btn.parentNode.replaceChild(newBtn, btn);
+        
+        newBtn.addEventListener('click', function() {
+            const notificationId = this.getAttribute('data-notification-id');
+            const notificationTitle = this.getAttribute('data-notification-title');
+            deleteNotification(notificationId, notificationTitle);
+        });
+    });
+}
+
+// 5. NOUVELLE FONCTION: Protection XSS
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 function getNotificationColor(type) {
     const colors = {
         info: '#3498db',
@@ -1444,62 +1580,95 @@ function downloadSampleFile(format) {
     }
 }
 
-// Modifier une notification
 async function editNotification(notificationId) {
-  try {
-    // Charger les données de la notification
-    const response = await authenticatedRequest(`${API_BASE}/admin/notifications/${notificationId}`);
-    
-    if (response && response.ok) {
-      const notification = await response.json();
-      
-      // Remplir le formulaire
-      document.getElementById('notification-title').value = notification.title;
-      document.getElementById('notification-message').value = notification.message;
-      document.getElementById('notification-type').value = notification.type;
-      document.getElementById('notification-priority').value = notification.priority;
-      document.getElementById('notification-target').value = notification.target;
-      
-      // Stocker l'ID de la notification en cours d'édition
-      document.getElementById('notification-form').dataset.editingId = notificationId;
-      
-      // Changer le texte du bouton
-      document.querySelector('#notification-form button[type="submit"]').textContent = 'Modifier la Notification';
-      
-      showNotification('Notification chargée pour modification');
-      
-    } else {
-      showNotification('Erreur lors du chargement de la notification', 'error');
+    // ✅ Protection contre les appels multiples
+    if (editNotification._loading) {
+        console.log('Édition déjà en cours, ignorée');
+        return;
     }
-  } catch (error) {
-    console.error('Erreur:', error);
-    showNotification('Erreur lors du chargement de la notification', 'error');
-  }
+    
+    editNotification._loading = true;
+    
+    try {
+        const response = await authenticatedRequest(`${API_BASE}/admin/notifications/${notificationId}`);
+        
+        if (response && response.ok) {
+            const notification = await response.json();
+            
+            // Remplir le formulaire
+            document.getElementById('notification-title').value = notification.title;
+            document.getElementById('notification-message').value = notification.message;
+            document.getElementById('notification-type').value = notification.type;
+            document.getElementById('notification-priority').value = notification.priority;
+            document.getElementById('notification-target').value = notification.target;
+            
+            // Marquer comme en cours d'édition
+            const form = document.getElementById('notification-form');
+            form.dataset.editingId = notificationId;
+            
+            // Changer l'interface
+            form.querySelector('button[type="submit"]').textContent = 'Modifier la Notification';
+            document.getElementById('cancel-edit-btn').style.display = 'inline-block';
+            
+            showNotification('Notification chargée pour modification');
+            
+        } else {
+            showNotification('Erreur lors du chargement de la notification', 'error');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showNotification('Erreur lors du chargement de la notification', 'error');
+    } finally {
+        setTimeout(() => {
+            editNotification._loading = false;
+        }, 500);
+    }
 }
 
 // Supprimer une notification
 async function deleteNotification(notificationId, notificationTitle) {
-  if (!confirm(`Êtes-vous sûr de vouloir supprimer la notification "${notificationTitle}" ? Cette action est irréversible.`)) {
-    return;
-  }
-
-  try {
-    const response = await authenticatedRequest(`${API_BASE}/admin/notifications/${notificationId}`, {
-      method: 'DELETE'
-    });
-
-    if (response && response.ok) {
-      const result = await response.json();
-      showNotification(result.message || 'Notification supprimée avec succès!');
-      loadNotifications();
-    } else if (response) {
-      const error = await response.json();
-      showNotification(error.error || 'Erreur lors de la suppression', 'error');
+    // ✅ Protection contre les suppressions multiples
+    if (deleteNotification._deleting && deleteNotification._deleting.has(notificationId)) {
+        console.log('Suppression déjà en cours pour:', notificationId);
+        return;
     }
-  } catch (error) {
-    console.error('Erreur:', error);
-    showNotification('Erreur lors de la suppression de la notification', 'error');
-  }
+    
+    if (!confirm(`Êtes-vous sûr de vouloir supprimer la notification "${notificationTitle}" ?\n\nCette action est irréversible.`)) {
+        return;
+    }
+    
+    // Double confirmation pour les suppressions
+    if (!confirm('Confirmer définitivement la suppression ?')) {
+        return;
+    }
+    
+    // Marquer comme en cours de suppression
+    if (!deleteNotification._deleting) {
+        deleteNotification._deleting = new Set();
+    }
+    deleteNotification._deleting.add(notificationId);
+    
+    try {
+        const response = await authenticatedRequest(`${API_BASE}/admin/notifications/${notificationId}`, {
+            method: 'DELETE'
+        });
+
+        if (response && response.ok) {
+            const result = await response.json();
+            showNotification(result.message || 'Notification supprimée avec succès!');
+            loadNotifications();
+        } else if (response) {
+            const error = await response.json();
+            showNotification(error.error || 'Erreur lors de la suppression', 'error');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showNotification('Erreur lors de la suppression de la notification', 'error');
+    } finally {
+        setTimeout(() => {
+            deleteNotification._deleting?.delete(notificationId);
+        }, 1000);
+    }
 }
 
 // Modifier le gestionnaire du formulaire de notification
@@ -1555,11 +1724,14 @@ document.getElementById('notification-form').addEventListener('submit', async fu
 });
 
 // Annuler l'édition
+// Annuler l'édition
 function cancelEdit() {
-  document.getElementById('notification-form').reset();
-  delete document.getElementById('notification-form').dataset.editingId;
-  document.querySelector('#notification-form button[type="submit"]').textContent = 'Envoyer la Notification';
-  showNotification('Édition annulée');
+    const form = document.getElementById('notification-form');
+    form.reset();
+    delete form.dataset.editingId;
+    form.querySelector('button[type="submit"]').textContent = 'Envoyer la Notification';
+    document.getElementById('cancel-edit-btn').style.display = 'none';
+    showNotification('Édition annulée');
 }
 
 // Améliorer l'interface utilisateur de l'import/export (BONUS)
