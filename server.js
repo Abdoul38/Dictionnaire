@@ -19,32 +19,8 @@ const { body, validationResult } = require('express-validator');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// server.js - Ajoutez en haut du fichier après les imports
 const admin = require('firebase-admin');
 
-
-// Configuration Firebase Admin
-try {
-  const serviceAccountPath = path.join(__dirname, 'config', 'dictionnaire-zarma-firebase-adminsdk-fbsvc-ad2a95728a.json');
-  
-  if (fs.existsSync(serviceAccountPath)) {
-    const serviceAccount = require(serviceAccountPath);
-    
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-      // Optionnel: Ajoutez votre projectId si nécessaire
-      projectId: serviceAccount.project_id || 'dictionnaire-zarma'
-    });
-    
-    console.log('✅ Firebase Admin initialisé avec succès');
-  } else {
-    console.warn('⚠️ Fichier de service account Firebase non trouvé. Les notifications push ne fonctionneront pas.');
-    console.warn('📁 Chemin attendu:', serviceAccountPath);
-  }
-} catch (error) {
-  console.error('❌ Erreur initialisation Firebase Admin:', error.message);
-  console.warn('⚠️ Les notifications push ne fonctionneront pas sans configuration Firebase valide');
-}
 // ========================================
 // server-updated.js - Corrections principales
 // ========================================
@@ -185,13 +161,12 @@ function initializeWebSocket(server) {
 
 // Table pour stocker les tokens FCM des devices
 
-    
     // CORRECTION: Gérer les événements du serveur WebSocket
     wss.on('error', (error) => {
       console.error('❌ Erreur WebSocket Server:', error);
     });
     
-    wss.on('connection', (ws, req) => {
+wss.on('connection', (ws, req) => {
   const clientId = uuidv4();
   const clientIP = req.headers['x-forwarded-for'] || 
                    req.headers['x-real-ip'] || 
@@ -204,37 +179,55 @@ function initializeWebSocket(server) {
     userAgent: req.headers['user-agent'] || 'Unknown',
     connectedAt: new Date(),
     lastPing: new Date(),
-    isAlive: true
+    isAlive: true,
+    // ✅ NOUVEAU: Éviter les messages en double
+    lastMessageIds: new Set()
   };
   
   connectedClients.set(clientId, { ws, info: clientInfo });
   
   console.log(`🔗 Client WebSocket connecté: ${clientId} (Total: ${connectedClients.size})`);
   
-  // CORRECTION : Envoyer immédiatement le message de bienvenue
+  // Message de bienvenue unique
   try {
-    ws.send(JSON.stringify({
+    const welcomeMessage = {
       type: 'welcome',
       message: 'Connexion WebSocket établie avec succès',
       clientId: clientId,
       serverTime: Date.now(),
       timestamp: Date.now()
-    }));
+    };
     
+    ws.send(JSON.stringify(welcomeMessage));
     console.log(`✅ Message de bienvenue envoyé à ${clientId}`);
     
   } catch (error) {
     console.error(`❌ Erreur envoi bienvenue à ${clientId}:`, error);
   }
   
-  // CORRECTION : Gérer les messages avec plus de robustesse
+  // ✅ CORRECTION: Gestion des messages avec déduplication
   ws.on('message', (message) => {
     try {
       clientInfo.lastPing = new Date();
       clientInfo.isAlive = true;
       
       const data = JSON.parse(message.toString());
-      console.log(`📨 Message de ${clientId}:`, data);
+      
+      // Éviter les messages en double basés sur l'ID ou le contenu
+      const messageKey = data.id || `${data.type}_${data.timestamp}`;
+      if (clientInfo.lastMessageIds.has(messageKey)) {
+        console.log(`🔄 Message dupliqué ignoré de ${clientId}: ${messageKey}`);
+        return;
+      }
+      
+      // Ajouter au cache (limité à 100 IDs)
+      clientInfo.lastMessageIds.add(messageKey);
+      if (clientInfo.lastMessageIds.size > 100) {
+        const firstId = clientInfo.lastMessageIds.values().next().value;
+        clientInfo.lastMessageIds.delete(firstId);
+      }
+      
+      console.log(`📨 Message de ${clientId}:`, data.type);
       
       switch (data.type) {
         case 'ping':
@@ -243,7 +236,6 @@ function initializeWebSocket(server) {
             timestamp: Date.now(),
             clientId: clientId
           }));
-          console.log(`🏓 Pong envoyé à ${clientId}`);
           break;
           
         case 'heartbeat':
@@ -254,7 +246,6 @@ function initializeWebSocket(server) {
           break;
           
         case 'request_notifications':
-          // NOUVEAU : Répondre aux demandes de notifications
           console.log(`📨 Demande de notifications de ${clientId}`);
           sendExistingNotificationsToClient(ws, clientId);
           break;
@@ -330,8 +321,39 @@ function initializeWebSocket(server) {
 
 function broadcastNotification(notification) {
   if (!wss) {
-    console.log('❌ WebSocket Server non initialisé');
+    console.log('⚠️ WebSocket Server non initialisé');
     return 0;
+  }
+  
+  // ✅ Éviter les broadcasts multiples avec un délai
+  const now = Date.now();
+  const key = `${notification.id}_${notification.title}`;
+  
+  // Vérifier si on a déjà diffusé cette notification récemment
+  if (broadcastNotification._lastBroadcasts && broadcastNotification._lastBroadcasts.has(key)) {
+    const lastTime = broadcastNotification._lastBroadcasts.get(key);
+    if (now - lastTime < 1000) { // Éviter rediffusion dans la seconde
+      console.log('⚠️ Broadcast ignoré - trop récent:', key);
+      return 0;
+    }
+  }
+  
+  // Initialiser le cache si nécessaire
+  if (!broadcastNotification._lastBroadcasts) {
+    broadcastNotification._lastBroadcasts = new Map();
+  }
+  broadcastNotification._lastBroadcasts.set(key, now);
+  
+  // Nettoyer le cache toutes les minutes
+  if (!broadcastNotification._cleanupTimer) {
+    broadcastNotification._cleanupTimer = setInterval(() => {
+      const cutoff = Date.now() - 60000;
+      for (const [key, time] of broadcastNotification._lastBroadcasts.entries()) {
+        if (time < cutoff) {
+          broadcastNotification._lastBroadcasts.delete(key);
+        }
+      }
+    }, 60000);
   }
   
   const messageType = notification.isUpdate ? 'notification_updated' : 'notification';
@@ -341,9 +363,11 @@ function broadcastNotification(notification) {
     data: {
       ...notification,
       timestamp: notification.timestamp || Date.now(),
-      isHistorical: false
+      isHistorical: false,
+      isRealTime: true
     },
-    serverTime: Date.now()
+    serverTime: Date.now(),
+    broadcastId: `${key}_${now}` // ID unique pour traçage
   });
   
   let sentCount = 0;
@@ -357,7 +381,7 @@ function broadcastNotification(notification) {
       try {
         ws.send(message);
         sentCount++;
-        console.log(`✅ Notification envoyée à ${clientId} (${info.ip})`);
+        console.log(`✅ Notification envoyée à ${clientId}`);
       } catch (error) {
         console.error(`❌ Erreur envoi à ${clientId}:`, error);
         deadConnections.push(clientId);
@@ -374,15 +398,7 @@ function broadcastNotification(notification) {
     connectedClients.delete(clientId);
   });
   
-  const result = {
-    sent: sentCount,
-    errors: errorCount,
-    totalClients: connectedClients.size,
-    notification: notification.title
-  };
-  
-  console.log(`📊 Résultat diffusion:`, result);
-  
+  console.log(`📊 Broadcast terminé: ${sentCount} envois réussis, ${errorCount} erreurs`);
   return sentCount;
 }
 
@@ -494,73 +510,110 @@ app.get('/api/websocket/status', (req, res) => {
   });
 });
 
-
-// Routes pour les notifications administrateur
-// Corrections pour les notifications dans server.js
-
-// 1. Corriger la route de création de notifications
 app.post('/api/admin/notifications', authenticateToken, async (req, res) => {
   try {
-    // Vérifier le corps de la requête
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({ error: 'Corps de la requête manquant' });
     }
     
     const { title, message, type, priority, target, expiresAt } = req.body;
     
-    // Validation
     if (!title || !message) {
       return res.status(400).json({ error: 'Titre et message requis' });
     }
     
-    // Vérifier l'authentification
     if (!req.user || !req.user.username) {
       return res.status(401).json({ error: 'Utilisateur non authentifié' });
     }
     
+    // ✅ CORRECTION: Générer un ID unique et vérifier l'unicité
+    const notificationId = uuidv4();
+    
+    // Vérifier si cette notification existe déjà (protection contre double-clic)
+    const existingCheck = await pool.query(
+      'SELECT id FROM notifications WHERE id = $1',
+      [notificationId]
+    );
+    
+    if (existingCheck.rows.length > 0) {
+      return res.status(409).json({ 
+        error: 'Notification déjà existante',
+        id: notificationId 
+      });
+    }
+    
     const notification = {
-      id: uuidv4(), // Assurer que uuid est disponible
-      title,
-      message,
+      id: notificationId,
+      title: title.trim(),
+      message: message.trim(),
       type: type || 'info',
       priority: priority || 'normal',
       target: target || 'all',
-      createdAt: Date.now(), // Utiliser timestamp en millisecondes pour le WebSocket
-      expiresAt: expiresAt || (Date.now() + (7 * 24 * 60 * 60 * 1000)), // 7 jours en ms
+      createdAt: Date.now(),
+      expiresAt: expiresAt || (Date.now() + (7 * 24 * 60 * 60 * 1000)),
       createdBy: req.user.username
     };
     
-    // Sauvegarder dans la base (convertir en secondes pour PostgreSQL)
-    await pool.query(`
-      INSERT INTO notifications (id, title, message, type, priority, target, created_by, created_at, expires_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-    `, [
-      notification.id,
-      notification.title,
-      notification.message,
-      notification.type,
-      notification.priority,
-      notification.target,
-      notification.createdBy,
-      Math.floor(notification.createdAt / 1000), // Convertir en secondes pour DB
-      Math.floor(notification.expiresAt / 1000)  // Convertir en secondes pour DB
-    ]);
-    
-    // Diffuser en temps réel
-    const sentCount = broadcastNotification(notification);
-    
-    res.json({
-      success: true,
-      message: `Notification créée et diffusée à ${sentCount} clients`,
-      notification
-    });
+    // ✅ CORRECTION: Transaction pour éviter les doublons
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      // Insérer avec protection UNIQUE
+      await client.query(`
+        INSERT INTO notifications (id, title, message, type, priority, target, created_by, created_at, expires_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT (id) DO NOTHING
+      `, [
+        notification.id,
+        notification.title,
+        notification.message,
+        notification.type,
+        notification.priority,
+        notification.target,
+        notification.createdBy,
+        Math.floor(notification.createdAt / 1000),
+        Math.floor(notification.expiresAt / 1000)
+      ]);
+      
+      await client.query('COMMIT');
+      
+      // ✅ CORRECTION: Diffuser UNE SEULE FOIS après commit réussi
+      const sentCount = broadcastNotification(notification);
+      
+      res.json({
+        success: true,
+        message: `Notification créée et diffusée à ${sentCount} clients`,
+        notification: {
+          id: notification.id,
+          title: notification.title,
+          message: notification.message
+        }
+      });
+      
+    } catch (dbError) {
+      await client.query('ROLLBACK');
+      throw dbError;
+    } finally {
+      client.release();
+    }
     
   } catch (error) {
     console.error('Erreur création notification:', error);
-    res.status(500).json({ 
-      error: 'Erreur lors de la création de la notification',
-      details: error.message 
-    });
+    
+    // Ne pas renvoyer d'erreur si c'est juste un doublon
+    if (error.code === '23505') { // PostgreSQL unique violation
+      res.json({
+        success: true,
+        message: 'Notification déjà existante',
+        duplicate: true
+      });
+    } else {
+      res.status(500).json({ 
+        error: 'Erreur lors de la création de la notification',
+        details: error.message 
+      });
+    }
   }
 });
 
@@ -654,7 +707,6 @@ async function sendExistingNotificationsToClient(ws, clientId) {
     if (result.rows.length === 0) {
       console.log(`📭 Aucune notification historique pour ${clientId}`);
       
-      // Envoyer un message confirmant qu'il n'y a pas de notifications
       ws.send(JSON.stringify({
         type: 'notifications_history',
         data: [],
@@ -666,7 +718,6 @@ async function sendExistingNotificationsToClient(ws, clientId) {
     
     console.log(`📨 ${result.rows.length} notifications à envoyer à ${clientId}`);
     
-    // CORRECTION : Envoyer toutes les notifications en une seule fois
     const notifications = result.rows.map(row => ({
       id: row.id,
       title: row.title,
@@ -675,51 +726,30 @@ async function sendExistingNotificationsToClient(ws, clientId) {
       priority: row.priority,
       target: row.target,
       createdBy: row.created_by,
-      timestamp: row.timestamp, // En millisecondes
+      timestamp: row.timestamp,
       expiresAt: row.expires_at_ms,
       createdAt: row.created_at,
-      isHistorical: true
+      isHistorical: true // ✅ Marquer comme historique
     }));
     
-    // Envoyer l'historique complet
-    try {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-          type: 'notifications_history',
-          data: notifications,
-          count: notifications.length,
-          timestamp: Date.now()
-        }));
-        
-        console.log(`✅ ${notifications.length} notifications historiques envoyées à ${clientId}`);
-        
-        // Puis envoyer chaque notification individuellement pour déclencher les alertes
-        setTimeout(() => {
-          notifications.slice(0, 3).forEach((notification, index) => {
-            setTimeout(() => {
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                  type: 'notification',
-                  data: notification,
-                  serverTime: Date.now()
-                }));
-                console.log(`🔔 Notification individuelle #${index+1} envoyée: "${notification.title}"`);
-              }
-            }, index * 500); // Délai de 500ms entre chaque notification
-          });
-        }, 1000);
-        
-      } else {
-        console.log(`❌ Client ${clientId} déconnecté pendant l'envoi`);
-      }
-    } catch (error) {
-      console.error(`❌ Erreur envoi notifications à ${clientId}:`, error);
+    // ✅ ENVOYER SEULEMENT l'historique complet (pas d'envoi individuel)
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'notifications_history',
+        data: notifications,
+        count: notifications.length,
+        timestamp: Date.now(),
+        isHistorical: true // ✅ Important pour le client
+      }));
+      
+      console.log(`✅ ${notifications.length} notifications historiques envoyées à ${clientId}`);
+    } else {
+      console.log(`❌ Client ${clientId} déconnecté pendant l'envoi`);
     }
     
   } catch (error) {
     console.error(`❌ Erreur chargement notifications historiques pour ${clientId}:`, error);
     
-    // Envoyer une notification d'erreur
     try {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
@@ -1216,7 +1246,7 @@ app.get('/api/test', (req, res) => {
 });
 
 // PUT /api/admin/notifications/:id - Modifier une notification
-app.put('/api/admin/notifications/:id', authenticateToken, async (req, res) => {
+app.put('/api/admin/notifications/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { title, message, type, priority, target, expiresAt } = req.body;
@@ -1240,7 +1270,7 @@ app.put('/api/admin/notifications/:id', authenticateToken, async (req, res) => {
     await pool.query(`
       UPDATE notifications 
       SET title = $1, message = $2, type = $3, priority = $4, 
-          target = $5, expires_at = $6, updated_at = EXTRACT(EPOCH FROM NOW())
+          target = $5, expires_at = $6
       WHERE id = $7
     `, [
       title,
@@ -1295,7 +1325,7 @@ app.put('/api/admin/notifications/:id', authenticateToken, async (req, res) => {
 });
 
 // DELETE /api/admin/notifications/:id - Supprimer une notification
-app.delete('/api/admin/notifications/:id', authenticateToken, async (req, res) => {
+app.delete('/api/admin/notifications/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -3165,20 +3195,6 @@ await pool.query(`
     created_at BIGINT NOT NULL,
     expires_at BIGINT NOT NULL,
     is_active BOOLEAN DEFAULT TRUE
-  )
-`);
-await pool.query(`
-  CREATE TABLE IF NOT EXISTS user_devices(
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES admin_users(id) ON DELETE CASCADE,
-    device_id VARCHAR(255) NOT NULL,
-    fcm_token TEXT NOT NULL,
-    platform VARCHAR(50),
-    app_version VARCHAR(50),
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()),
-    updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()),
-    UNIQUE(device_id, fcm_token)
   )
 `);
 
